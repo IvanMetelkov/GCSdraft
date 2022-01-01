@@ -31,17 +31,35 @@ public class GCSmanager : MonoBehaviour
     void Awake()
     {
         Random.InitState((int)DateTime.Now.Ticks);
+        origin.isFixed = true;
         constraints = new List<Constraint>();
         failedConstraints = new List<Constraint>();
         points = new List<Point>();
         segments = new List<Segment>();
-        CreatePoint(0, 3);
-        //CreatePoint(1, 0);
-        AddConstraint(new Distance(points[0], origin, 1.0f));
+
+        CreatePoint(0, 1);
         CreatePoint(1, 0);
+        //AddConstraint(new Distance(points[0], points[1], 10.0f));
+     
+        //AddConstraint(new Alignment(points[0], points[1]));
+        //AddConstraint(new Distance(points[0], points[1], 5.0f));
+        //CreatePoint(10, 10);
+        /*AddConstraint(new Fixation(points[0], points[0].x, points[0].y));
+        AddConstraint(new Distance(points[1], origin, 1.0f));
+        AddConstraint(new Distance(points[1], points[0], 10.0f));
+        AddConstraint(new Distance(points[1], points[0], 5.0f));
+
+        AddConstraint(new Fixation(points[0], points[0].x, points[0].y));
+        AddConstraint(new Fixation(points[1], points[1].x, points[1].y));
+        AddConstraint(new Fixation(points[0], points[0].x, points[0].y));
+        AddConstraint(new Fixation(points[1], points[1].x, points[1].y));
+        AddConstraint(new Fixation(points[1], points[1].x, points[1].y));*/
+
+        /*AddConstraint(new Distance(points[0], origin, 1.0f));
         AddConstraint(new Distance(origin, points[1], 10.0f));
         AddConstraint(new Distance(points[0], origin, 1.0f));
-        AddConstraint(new Distance(points[0], points[1], 2.0f));
+        AddConstraint(new Distance(points[0], points[1], -1.0f));
+        AddConstraint(new Distance(points[0], points[1], 1.0f));*/
 
         for (int i = 0; i < equationCount; ++i)
         {
@@ -128,6 +146,8 @@ public class GCSmanager : MonoBehaviour
         {
             Matrix<float> augumented = tmpA.Append(tmpB);
             //проверяем совместность, привет Кронекеру
+            //только, кажется, не работает
+            //гонять метод Ньютона-Рафсона для проверки как есть?
             if (equationCount + constraint.lambdas == augumented.Rank())
             {
                 matrixNF = tmpA;
@@ -155,6 +175,7 @@ public class Point
     //чтобы отслеживать, перетащили ли только что точку, т.е,
     //надо ли для нее искать дельты и новые координаты 
     public bool wasMoved = false;
+    public bool isFixed = false;
     public float x;
     public float y;
 
@@ -213,6 +234,7 @@ abstract public class Constraint
     }
 
     //метод заполняет СЛАУ по уравнению
+    //необязательный параметр можно бы и сделать обязательным, хз
     public abstract void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1);
 
     public int InactivePoints() {
@@ -253,42 +275,132 @@ public class Segment
 //класс ограничения типа 2 - "расстояние между двумя точками"
 public class Distance : Constraint
 {
-    public float distance;
+    private float distance;
     public Distance(Point p1, Point p2, float d) : base(1, new List<Point> { p1, p2 })
     {
         distance = d;
     }
     public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
     {
+        //опа костыли
         if (!pointList[0].IsOrigin())
         {
-            //полезли костыли
-            if (pointList[0].columnID != -1)
+            int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
+            m[equationNumber, 2 * column] = 2.0f * (pointList[0].x - pointList[1].x);
+            m[equationNumber, 2 * column + 1] = 2.0f * (pointList[0].y - pointList[1].y);
+            if (pointList[0].columnID == -1)
             {
-                m[equationNumber, 2 * pointList[0].columnID] = 2 * (pointList[0].x - pointList[1].x);
-                m[equationNumber, 2 * pointList[0].columnID + 1] = 2 * (pointList[0].y - pointList[1].y);
-            }
-            else
-            {
-                m[equationNumber, 2 * startingColumn] = 2 * (pointList[0].x - pointList[1].x);
-                m[equationNumber, 2 * startingColumn + 1] = 2 * (pointList[0].y - pointList[1].y);
                 startingColumn++;
             }
         }
         if (!pointList[1].IsOrigin())
         {
-            if (pointList[1].columnID != -1)
-            {
-                m[equationNumber, 2 * pointList[1].columnID] = 2 * (pointList[1].x - pointList[0].x);
-                m[equationNumber, 2 * pointList[1].columnID + 1] = 2 * (pointList[1].y - pointList[0].y);
-            }
-            else
-            {
-                m[equationNumber, 2 * startingColumn] = 2 * (pointList[1].x - pointList[0].x);
-                m[equationNumber, 2 * startingColumn + 1] = 2 * (pointList[1].y - pointList[0].y);
-            }
+            int column = pointList[1].columnID == -1 ? startingColumn : pointList[1].columnID;
+            m[equationNumber, 2 * column] = 2.0f * (pointList[1].x - pointList[0].x);
+            m[equationNumber, 2 * column + 1] = 2.0f * (pointList[1].y - pointList[0].y);
         }
 
-        b[equationNumber, 0] = Mathf.Pow(pointList[0].x - pointList[1].x, 2.0f) + Mathf.Pow(pointList[0].y - pointList[1].y, 2.0f) - Mathf.Pow(distance, 2.0f);
+        b[equationNumber, 0] = -(Mathf.Pow(pointList[0].x - pointList[1].x, 2.0f) + Mathf.Pow(pointList[0].y - pointList[1].y, 2.0f) - Mathf.Pow(distance, 2.0f));
+    }
+}
+
+public class Fixation : Constraint
+{
+    //запрашивать ли новые координаты для фиксации??
+    private float x;
+    private float y;
+    public Fixation(Point p, float newX, float newY) : base(2, new List<Point> { p })
+    {
+        p.isFixed = true;
+        x = newX;
+        y = newY;
+    }
+
+    public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
+    {
+        int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
+        m[equationNumber, 2 * column] = 1.0f;
+        m[equationNumber + 1, 2 * column + 1] = 1.0f;
+        //both might as well be zero
+        b[equationNumber, 0] = -(x - pointList[0].x);
+        b[equationNumber + 1, 0] = -(y - pointList[0].y);
+    }
+}
+
+//есть ли разница, будут ли координаты одной из точек
+//в левой части Ax=b или правой
+public class Alignment : Constraint
+{
+    public Alignment(Point p1, Point p2) : base(2, new List<Point> { p1, p2 }) { }
+    public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
+    {
+        //о5 костыли
+        if (!pointList[0].IsOrigin())
+        {
+            int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
+            m[equationNumber, 2 * column] = -1.0f;
+            m[equationNumber + 1, 2 * column + 1] = -1.0f;
+            if (pointList[0].columnID == -1)
+            {
+                startingColumn++;
+            }
+        }
+        if (!pointList[1].IsOrigin())
+        {
+            int column = pointList[1].columnID == -1 ? startingColumn : pointList[1].columnID;
+            m[equationNumber, 2 * column] = 1.0f;
+            m[equationNumber + 1, 2 * column + 1] = 1.0f;
+        }
+        b[equationNumber, 0] = -(pointList[1].x - pointList[0].x);
+        b[equationNumber + 1, 0] = -(pointList[1].y - pointList[0].y);
+    }
+}
+
+public class Verticality : Constraint
+{
+    public Verticality(Point p1, Point p2) : base(1, new List<Point> { p1, p2 }) { }
+
+    public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
+    {
+        //да как так-то а
+        if (!pointList[0].IsOrigin())
+        {
+            int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
+            m[equationNumber, 2 * column] = -1.0f;
+            if (pointList[0].columnID == -1)
+            {
+                startingColumn++;
+            }
+        }
+        if (!pointList[1].IsOrigin())
+        {
+            int column = pointList[1].columnID == -1 ? startingColumn : pointList[1].columnID;
+            m[equationNumber, 2 * column] = 1.0f;
+        }
+        b[equationNumber, 0] = -(pointList[1].x - pointList[0].x);
+    }
+}
+
+public class Horizontality : Constraint
+{
+    public Horizontality(Point p1, Point p2) : base(1, new List<Point> { p1, p2 }) { }
+
+    public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
+    {
+        if (!pointList[0].IsOrigin())
+        {
+            int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
+            m[equationNumber, 2 * column + 1] = -1.0f;
+            if (pointList[0].columnID == -1)
+            {
+                startingColumn++;
+            }
+        }
+        if (!pointList[1].IsOrigin())
+        {
+            int column = pointList[1].columnID == -1 ? startingColumn : pointList[1].columnID;
+            m[equationNumber, 2 * column + 1] = 1.0f;
+        }
+        b[equationNumber, 0] = -(pointList[1].y - pointList[0].y);
     }
 }
