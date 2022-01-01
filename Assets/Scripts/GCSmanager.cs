@@ -75,7 +75,44 @@ public class GCSmanager : MonoBehaviour
 
     private void UpdatePoints()
     {
+        for (int i = constraintedPoints.Count - 1; i >= 0; --i)
+        {
+            //нет ну а что
+            if (constraintedPoints[i].constraintCount <= 0)
+            {
+                matrixNF.RemoveColumn(2 * i + 1);
+                matrixNF.RemoveColumn(2 * i);
+                constraintedPoints.RemoveAt(i);
+            }
+        }
 
+        for (int i = 0; i < constraintedPoints.Count; ++i)
+        {
+            constraintedPoints[i].columnID = i;
+        }
+    }
+
+    private void UpdateConstraints()
+    {
+        for (int i = constraints.Count - 1; i >= 0; --i)
+        {
+            if (constraints[i].toBeDeleted)
+            {
+                //съедаем матрицу
+                for (int j = 0; j < constraints[i].lambdas; ++j)
+                {
+                    matrixNF.RemoveRow(constraints[i].startingEquation);
+                    freeVector.RemoveRow(constraints[i].startingEquation);
+                }
+                constraints.RemoveAt(i);
+            }
+        }
+        int startingEquation = 0;
+        foreach (Constraint constraint in constraints)
+        {
+            constraint.startingEquation = startingEquation;
+            startingEquation += constraint.lambdas;
+        }
     }
 
     //функция, которая будет вызываться при создании точки
@@ -94,9 +131,9 @@ public class GCSmanager : MonoBehaviour
         //то точно можно добавлять
         if (equationCount == 0)
         {
-            matrixNF = Matrix<float>.Build.Dense(constraint.lambdas, constraint.points * 2);
+            matrixNF = Matrix<float>.Build.Dense(constraint.lambdas, constraint.uniquePoints.Count * 2);
             freeVector = Matrix<float>.Build.Dense(constraint.lambdas, 1);
-            constraint.RegisterConstraint(constraintedPoints);
+            constraint.RegisterConstraint(constraintedPoints, 0);
             constraint.FillDerivatives(matrixNF, equationCount, freeVector);
             constraints.Add(constraint);
             equationCount += constraint.lambdas;
@@ -106,7 +143,7 @@ public class GCSmanager : MonoBehaviour
         //нет смысла переопределять
         if (!CheckState() && TestConstraint(constraint))
         {
-            constraint.RegisterConstraint(constraintedPoints);
+            constraint.RegisterConstraint(constraintedPoints, equationCount);
             constraints.Add(constraint);
             equationCount += constraint.lambdas;
         }
@@ -115,6 +152,33 @@ public class GCSmanager : MonoBehaviour
             failedConstraints.Add(constraint);
         }
 
+    }
+
+    public void DeleteConstraint(Constraint constraint)
+    {
+        constraint.toBeDeleted = true;
+        constraint.MarkPoints();
+        UpdatePoints();
+        //о5 съедаем матрицу
+        for (int j = 0; j < constraint.lambdas; ++j)
+        {
+            matrixNF.RemoveRow(constraint.startingEquation);
+            freeVector.RemoveRow(constraint.startingEquation);
+        }
+        constraints.RemoveAt(constraints.FindIndex(c => c.startingEquation == constraint.startingEquation));
+        int startingEquation = 0;
+        foreach (Constraint c in constraints)
+        {
+            c.startingEquation = startingEquation;
+            startingEquation += c.lambdas;
+        }
+    }
+    public void DeletePoint(Point point)
+    {
+        point.MarkConstraints();
+        UpdatePoints();
+        points.RemoveAt(points.FindIndex(p => p.pointID == point.pointID));
+        UpdateConstraints();
     }
 
     //каждое новое ограничение надо проверять на
@@ -176,8 +240,10 @@ public class Point
     //надо ли для нее искать дельты и новые координаты 
     public bool wasMoved = false;
     public bool isFixed = false;
+    public int constraintCount = 0;
     public float x;
     public float y;
+    public List<Constraint> relatedConstraints;
 
     public Point(float x, float y, int id)
     {
@@ -185,11 +251,21 @@ public class Point
         this.y = y;
         pointID = id;
         columnID = -1;
+        relatedConstraints = new List<Constraint>();
     }
 
     public bool IsOrigin()
     {
         return pointID == -1;
+    }
+
+    public void MarkConstraints()
+    {
+        foreach (Constraint constraint in relatedConstraints)
+        {
+            constraint.toBeDeleted = true;
+            constraint.MarkPoints();
+        }
     }
 
     //для тестов
@@ -202,10 +278,13 @@ abstract public class Constraint
     //возможно надо, чтобы знать, по скольким лямбдам ждать производные
     //а еще - это количество порождаемых уравнений
     public int lambdas;
-    public int points = 0;
     public List<Point> pointList;
+    public List<Point> uniquePoints;
+    public int startingEquation;
+    public bool toBeDeleted = false;
     public Constraint(int lambdas, List<Point> points)
     {
+        uniquePoints = new List<Point>();
         this.lambdas = lambdas;
         pointList = points;
         CalculateUniquePoints();
@@ -218,18 +297,28 @@ abstract public class Constraint
         {
             if (!p.IsOrigin() && !uniqueIDs.Exists(i => i == p.pointID))
             {
+                uniquePoints.Add(p);
                 uniqueIDs.Add(p.pointID);
-                points++;
+                p.constraintCount++;
             }
         }
     }
     //если ограничение не переопределяет систему и не
     //противоречит другим - "регистрируем" его
-    public void RegisterConstraint(List<Point> constraintedPoints)
+    public void RegisterConstraint(List<Point> constraintedPoints, int number)
     {
-        foreach (Point p in pointList)
+        startingEquation = number;
+        foreach (Point p in uniquePoints)
         {
             AddPoint(p, constraintedPoints);
+        }
+    }
+
+    public void MarkPoints()
+    {
+        foreach (Point p in uniquePoints)
+        {
+            p.constraintCount--;
         }
     }
 
@@ -239,7 +328,7 @@ abstract public class Constraint
 
     public int InactivePoints() {
         int count = 0;
-        foreach (Point p in pointList)
+        foreach (Point p in uniquePoints)
         {
             if (p.columnID == -1 && !p.IsOrigin())
             {
@@ -256,6 +345,7 @@ abstract public class Constraint
         {
             p.columnID = constraintedPoints.Count;
             constraintedPoints.Add(p);
+            p.relatedConstraints.Add(this);
         }
     }
 }
