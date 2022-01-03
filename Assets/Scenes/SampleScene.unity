@@ -160,6 +160,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7d6ac958640736d46abd656ec075a595, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  equationCount: 0
+  precision: 0.00001
   pointsCreated: 0
 --- !u!20 &519420031
 Camera:

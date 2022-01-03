@@ -16,16 +16,20 @@ public class GCSmanager : MonoBehaviour
     //иногда 1 ограничение порождает 2 уравнения в системе
     //хз, какой костыль лучше
     public int equationCount = 0;
+    public double precision = 1E-8;
     //точка начала координат, характерный id = -1
     [HideInInspector]
-    public static Point origin = new Point(0.0f, 0.0f, -1);
+    public static Point origin = new Point(0.0, 0.0, -1);
     [HideInInspector]
-    public static List<Point> constraintedPoints = new List<Point>();
-    [HideInInspector]
-    private Matrix<float> matrixNF;
-    [HideInInspector]
-    private Matrix<float> freeVector;
+    public List<Point> constraintedPoints;
+    private Matrix<double> matrixNF;
+    private Matrix<double> freeVector;
+
+    private Matrix<double> consJacobian;
+    private Matrix<double> consB;
+    private Matrix<double> consDeltas;
     //костыль, чтобы возвращать уникальные id точек
+    //как вариант GUID
     public int pointsCreated = 0;
 
     void Awake()
@@ -35,12 +39,25 @@ public class GCSmanager : MonoBehaviour
         constraints = new List<Constraint>();
         failedConstraints = new List<Constraint>();
         points = new List<Point>();
+        constraintedPoints = new List<Point>();
         segments = new List<Segment>();
 
-        CreatePoint(0, 1);
-        CreatePoint(1, 0);
-        //AddConstraint(new Distance(points[0], points[1], 10.0f));
      
+        CreatePoint(-900.1, 1.1);
+        CreatePoint(10, 0);
+        CreatePoint(500.3, 5);
+        AddConstraint(new Fixation(points[2]));
+        AddConstraint(new Alignment(points[1], points[2]));
+        AddConstraint(new Alignment(points[1], points[0]));
+        //AddConstraint(new Fixation(points[1]));
+
+        //AddConstraint(new Verticality(points[0], points[1]));
+
+        //AddConstraint(new Distance(points[0], points[1], 10.0f));
+        //AddConstraint(new Alignment(points[0], origin));
+        //AddConstraint(new Distance(points[1], origin, 10.0f));
+        //AddConstraint(new Distance(points[0], points[1], 10.0f));
+
         //AddConstraint(new Alignment(points[0], points[1]));
         //AddConstraint(new Distance(points[0], points[1], 5.0f));
         //CreatePoint(10, 10);
@@ -61,11 +78,19 @@ public class GCSmanager : MonoBehaviour
         AddConstraint(new Distance(points[0], points[1], -1.0f));
         AddConstraint(new Distance(points[0], points[1], 1.0f));*/
 
-        for (int i = 0; i < equationCount; ++i)
+
+
+        //Debug.Log(matrixNF.ToString());
+        //Debug.Log(freeVector.ToString());
+
+        foreach (Point p in points)
         {
-            Debug.Log(matrixNF.Row(i));
-            Debug.Log(freeVector.Row(i));
+            p.LogPosition();
         }
+        //consDeltas = consJacobian.Solve(consB);
+        //Debug.Log(consJacobian.ToString());
+        //Debug.Log(consDeltas.ToString());
+        //Debug.Log(consB.ToString());
     }
 
     void Update()
@@ -92,6 +117,33 @@ public class GCSmanager : MonoBehaviour
         }
     }
 
+    public void BuildJacobian(Constraint c = null)
+    {
+        int startingL = 0, addP = 0, addL = 0;
+
+        if (c != null)
+        {
+            addP = c.InactivePoints();
+            addL = c.lambdas;
+        }
+
+        consJacobian = Matrix<double>.Build.Dense((constraintedPoints.Count + addP) * 2 + equationCount + addL,
+            (constraintedPoints.Count + addP) * 2 + equationCount + addL);
+        consB = Matrix<double>.Build.Dense((constraintedPoints.Count + addP) * 2 + equationCount + addL, 1);
+        //consDeltas = Matrix<double>.Build.Dense((constraintedPoints.Count + addP) * 2 + equationCount + addL, 1);
+
+        foreach (Constraint constraint in constraints)
+        {
+            constraint.FillJacobian(consJacobian, consDeltas, consB, startingL + (constraintedPoints.Count + addP) * 2);
+            startingL += constraint.lambdas;
+        }
+
+        if (c !=null)
+            c.FillJacobian(consJacobian, consDeltas, consB, startingL + (constraintedPoints.Count + addP) * 2, constraintedPoints.Count);
+
+        consB = consB.Multiply(-1.0);
+    }
+
     private void UpdateConstraints()
     {
         for (int i = constraints.Count - 1; i >= 0; --i)
@@ -104,6 +156,13 @@ public class GCSmanager : MonoBehaviour
                     matrixNF.RemoveRow(constraints[i].startingEquation);
                     freeVector.RemoveRow(constraints[i].startingEquation);
                 }
+
+                if (constraints[i].GetType() == typeof(Fixation))
+                {
+                    Fixation tmp = (Fixation)constraints[i];
+                    tmp.pointList[0].isFixed = false;
+                }
+
                 constraints.RemoveAt(i);
             }
         }
@@ -116,7 +175,7 @@ public class GCSmanager : MonoBehaviour
     }
 
     //функция, которая будет вызываться при создании точки
-    public void CreatePoint(float x, float y)
+    public void CreatePoint(double x, double y)
     {
         points.Add(new Point(x, y, pointsCreated));
         //points.Add(new Point(pointsCreated));
@@ -131,12 +190,20 @@ public class GCSmanager : MonoBehaviour
         //то точно можно добавлять
         if (equationCount == 0)
         {
-            matrixNF = Matrix<float>.Build.Dense(constraint.lambdas, constraint.uniquePoints.Count * 2);
-            freeVector = Matrix<float>.Build.Dense(constraint.lambdas, 1);
+            matrixNF = Matrix<double>.Build.Dense(constraint.lambdas, constraint.uniquePoints.Count * 2);
+            freeVector = Matrix<double>.Build.Dense(constraint.lambdas, 1);
             constraint.RegisterConstraint(constraintedPoints, 0);
             constraint.FillDerivatives(matrixNF, equationCount, freeVector);
             constraints.Add(constraint);
             equationCount += constraint.lambdas;
+
+            //BuildJacobian();
+            _ = Solve();
+
+           /* consDeltas = consJacobian.Solve(consB);
+            Debug.Log(consJacobian.ToString());
+            Debug.Log(consDeltas.ToString());
+            Debug.Log(consB.ToString());*/
         }
         else
         //если уже полностью определена,
@@ -150,10 +217,79 @@ public class GCSmanager : MonoBehaviour
         else
         {
             failedConstraints.Add(constraint);
+            if (constraint.GetType() == typeof(Fixation))
+            {
+                Fixation tmp = (Fixation)constraint;
+                tmp.pointList[0].isFixed = false;
+            }
         }
 
     }
 
+    public bool Solve(Constraint probe = null)
+    {
+        List<(double, double)> backup = new List<(double, double)>();
+        foreach (Point p in constraintedPoints)
+        {
+            backup.Add((p.x, p.y));
+        }
+        int iterations = 0;
+
+        int addP = 0, addL = 0;
+
+        if (probe != null)
+        {
+            addP = probe.InactivePoints();
+            addL = probe.lambdas;
+        }
+        consDeltas = Matrix<double>.Build.Dense((constraintedPoints.Count + addP) * 2 + equationCount + addL, 1);
+        while (iterations < 50 && EvaluateError(probe))
+        {
+            BuildJacobian(probe);
+            consDeltas = consJacobian.Solve(consB);
+            UpdatePointValues(probe);
+            iterations++;
+        }
+
+        return !EvaluateError();
+    }
+
+    private bool EvaluateError(Constraint probe = null)
+    {
+        double err = 0;
+        foreach (Constraint constraint in constraints)
+        {
+            err += constraint.EstimateError(consDeltas);
+        }
+
+        if (probe != null)
+        {
+            err += probe.EstimateError(consDeltas);
+        }
+        //считать квадраты?
+        return err > precision;
+    }
+    private void UpdatePointValues(Constraint probe = null)
+    {
+        for (int i = 0; i < constraintedPoints.Count; ++i)
+        {
+            constraintedPoints[i].x += consDeltas[2 * i, 0];
+            constraintedPoints[i].y += consDeltas[2 * i + 1, 0];
+        }
+        if (probe != null)
+        {
+            int index = constraintedPoints.Count;
+            foreach (Point p in probe.uniquePoints)
+            {
+                if (p.columnID == -1)
+                {
+                    p.x += consDeltas[2 * index, 0];
+                    p.y += consDeltas[2 * index + 1, 0];
+                    index++;
+                }
+            }
+        }
+    }
     public void DeleteConstraint(Constraint constraint)
     {
         constraint.toBeDeleted = true;
@@ -165,6 +301,13 @@ public class GCSmanager : MonoBehaviour
             matrixNF.RemoveRow(constraint.startingEquation);
             freeVector.RemoveRow(constraint.startingEquation);
         }
+
+        if (constraint.GetType() == typeof(Fixation))
+        {
+            Fixation tmp = (Fixation)constraint;
+            tmp.pointList[0].isFixed = false;
+        }
+
         constraints.RemoveAt(constraints.FindIndex(c => c.startingEquation == constraint.startingEquation));
         int startingEquation = 0;
         foreach (Constraint c in constraints)
@@ -188,14 +331,14 @@ public class GCSmanager : MonoBehaviour
     {
         //по идее можно просто использовать equationCount
         //int startingRank = matrixNF.Rank();
-        Matrix<float> tmpA = matrixNF.Clone();
-        Matrix<float> tmpB = freeVector.Clone();
-        tmpA = tmpA.Stack(Matrix<float>.Build.Dense(constraint.lambdas, constraintedPoints.Count * 2));
-        tmpB = tmpB.Stack(Matrix<float>.Build.Dense(constraint.lambdas, 1));
+        Matrix<double> tmpA = matrixNF.Clone();
+        Matrix<double> tmpB = freeVector.Clone();
+        tmpA = tmpA.Stack(Matrix<double>.Build.Dense(constraint.lambdas, constraintedPoints.Count * 2));
+        tmpB = tmpB.Stack(Matrix<double>.Build.Dense(constraint.lambdas, 1));
         int pointsToAdd = constraint.InactivePoints();
         if (pointsToAdd > 0)
         {
-            tmpA = tmpA.Append(Matrix<float>.Build.Dense(tmpA.RowCount, pointsToAdd * 2));
+            tmpA = tmpA.Append(Matrix<double>.Build.Dense(tmpA.RowCount, pointsToAdd * 2));
         }
         constraint.FillDerivatives(tmpA, equationCount, tmpB, constraintedPoints.Count);
 
@@ -208,18 +351,32 @@ public class GCSmanager : MonoBehaviour
         //проверяем ЛНЗ
         if (tmpA.Rank() == equationCount + constraint.lambdas)
         {
-            Matrix<float> augumented = tmpA.Append(tmpB);
+            //Matrix<double> augumented = tmpA.Append(tmpB);
+            consDeltas = Matrix<double>.Build.Dense((constraintedPoints.Count + pointsToAdd) * 2 + equationCount + constraint.lambdas, 1);
+            BuildJacobian(constraint);
+            Debug.Log(consJacobian.Rank());
+            Debug.Log(consJacobian.ToString());
+            if (consJacobian.Rank() == (constraintedPoints.Count + pointsToAdd) * 2 + equationCount + constraint.lambdas)
+            {
+                if (Solve(constraint))
+                {
+                    matrixNF = tmpA;
+                    freeVector = tmpB;
+                    Debug.Log("win");
+                    return true;
+                }
+            }
             //проверяем совместность, привет Кронекеру
             //только, кажется, не работает
             //гонять метод Ньютона-Рафсона для проверки как есть?
-            if (equationCount + constraint.lambdas == augumented.Rank())
+         /*   if (equationCount + constraint.lambdas == augumented.Rank())
             {
                 matrixNF = tmpA;
                 freeVector = tmpB;
                 return true;
-            }
+            }*/
         }
-
+        Debug.Log("lose");
         return false;
     }
 
@@ -241,17 +398,22 @@ public class Point
     public bool wasMoved = false;
     public bool isFixed = false;
     public int constraintCount = 0;
-    public float x;
-    public float y;
+    public double x;
+    public double y;
     public List<Constraint> relatedConstraints;
 
-    public Point(float x, float y, int id)
+    public Point(double x, double y, int id)
     {
         this.x = x;
         this.y = y;
         pointID = id;
         columnID = -1;
         relatedConstraints = new List<Constraint>();
+    }
+
+    public void LogPosition()
+    {
+        Debug.Log(x + " ; " + y);
     }
 
     public bool IsOrigin()
@@ -267,9 +429,7 @@ public class Point
             constraint.MarkPoints();
         }
     }
-
-    //для тестов
-    public Point(int id) : this(Random.Range(0.0f, 10.0f), Random.Range(0.0f, 10.0f), id) { }
+  
 }
 
 //абстрактный класс ограничения
@@ -282,25 +442,41 @@ abstract public class Constraint
     public List<Point> uniquePoints;
     public int startingEquation;
     public bool toBeDeleted = false;
+   // public int consEquations;
     public Constraint(int lambdas, List<Point> points)
     {
         uniquePoints = new List<Point>();
         this.lambdas = lambdas;
         pointList = points;
-        CalculateUniquePoints();
+        FindUniquePoints();
+      //  consEquations = uniquePoints.Count * 2 + lambdas;
     }
 
-    private void CalculateUniquePoints()
+    private void FindUniquePoints()
     {
-        List<int> uniqueIDs = new List<int>();
         foreach (Point p in pointList)
         {
-            if (!p.IsOrigin() && !uniqueIDs.Exists(i => i == p.pointID))
+            if (!p.IsOrigin() && !uniquePoints.Exists(point => point.pointID == p.pointID))
             {
                 uniquePoints.Add(p);
-                uniqueIDs.Add(p.pointID);
                 p.constraintCount++;
             }
+        }
+    }
+
+    public abstract void FillJacobian(Matrix<double> a, Matrix<double> x, Matrix<double> b, int startingColumnL, int startingColumnP = -1);
+
+    public void FillDiagonalValue(Matrix<double> a, int column)
+    {
+        //a[2 * column, 2 * column] = a[2 * column, 2 * column] == 0.0f ? 1.0f : a[2 * column, 2 * column];
+        if (a[2 * column, 2 * column] == 0.0)
+        {
+            a[2 * column, 2 * column] = 1.0;
+        }
+        
+        if (a[2 * column + 1, 2 * column + 1] == 0.0)
+        {
+            a[2 * column + 1, 2 * column + 1] = 1.0;
         }
     }
     //если ограничение не переопределяет систему и не
@@ -314,6 +490,32 @@ abstract public class Constraint
         }
     }
 
+   /* public List<int> PrepareColumns(int startingColumn)
+    {
+        List<int> indices = new List<int>();
+        List<int> ans = new List<int>();
+        foreach(Point p in uniquePoints)
+        {
+            if (!p.IsOrigin()) {
+                if (p.columnID == -1)
+                {
+                    indices.Add(startingColumn);
+                    startingColumn++;
+                }
+                else
+                {
+                    indices.Add(p.columnID);
+                }
+            }
+        }
+
+        foreach (Point p in pointList)
+        {
+            ans.Add(indices[uniquePoints.FindIndex(point => point.pointID == p.pointID)]);
+        }
+        return ans;
+    }*/
+
     public void MarkPoints()
     {
         foreach (Point p in uniquePoints)
@@ -324,7 +526,7 @@ abstract public class Constraint
 
     //метод заполняет СЛАУ по уравнению
     //необязательный параметр можно бы и сделать обязательным, хз
-    public abstract void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1);
+    public abstract void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1);
 
     public int InactivePoints() {
         int count = 0;
@@ -348,6 +550,8 @@ abstract public class Constraint
             p.relatedConstraints.Add(this);
         }
     }
+
+    public abstract double EstimateError(Matrix<double> deltas);
 }
 
 //класс отрезка
@@ -365,19 +569,19 @@ public class Segment
 //класс ограничения типа 2 - "расстояние между двумя точками"
 public class Distance : Constraint
 {
-    private float distance;
-    public Distance(Point p1, Point p2, float d) : base(1, new List<Point> { p1, p2 })
+    private double distance;
+    public Distance(Point p1, Point p2, double d) : base(1, new List<Point> { p1, p2 })
     {
         distance = d;
     }
-    public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
+    public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
     {
         //опа костыли
         if (!pointList[0].IsOrigin())
         {
             int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
-            m[equationNumber, 2 * column] = 2.0f * (pointList[0].x - pointList[1].x);
-            m[equationNumber, 2 * column + 1] = 2.0f * (pointList[0].y - pointList[1].y);
+            m[equationNumber, 2 * column] = 2.0 * (pointList[0].x - pointList[1].x);
+            m[equationNumber, 2 * column + 1] = 2.0 * (pointList[0].y - pointList[1].y);
             if (pointList[0].columnID == -1)
             {
                 startingColumn++;
@@ -386,34 +590,53 @@ public class Distance : Constraint
         if (!pointList[1].IsOrigin())
         {
             int column = pointList[1].columnID == -1 ? startingColumn : pointList[1].columnID;
-            m[equationNumber, 2 * column] = 2.0f * (pointList[1].x - pointList[0].x);
-            m[equationNumber, 2 * column + 1] = 2.0f * (pointList[1].y - pointList[0].y);
+            m[equationNumber, 2 * column] = 2.0 * (pointList[1].x - pointList[0].x);
+            m[equationNumber, 2 * column + 1] = 2.0 * (pointList[1].y - pointList[0].y);
         }
 
-        b[equationNumber, 0] = -(Mathf.Pow(pointList[0].x - pointList[1].x, 2.0f) + Mathf.Pow(pointList[0].y - pointList[1].y, 2.0f) - Mathf.Pow(distance, 2.0f));
+        b[equationNumber, 0] = -(Math.Pow(pointList[0].x - pointList[1].x, 2.0) + Math.Pow(pointList[0].y - pointList[1].y, 2.0) - Math.Pow(distance, 2.0));
+    }
+
+    public override void FillJacobian(Matrix<double> a, Matrix<double> x, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    {
+        //List<int> indices = PrepareColumns(startingColumnP);
+    }
+
+    public override double EstimateError(Matrix<double> deltas)
+    {
+        return Math.Abs(Math.Pow(pointList[0].x - pointList[1].x, 2.0) + Math.Pow(pointList[0].y - pointList[1].y, 2.0) - Math.Pow(distance, 2.0));
     }
 }
 
 public class Fixation : Constraint
 {
-    //запрашивать ли новые координаты для фиксации??
-    private float x;
-    private float y;
-    public Fixation(Point p, float newX, float newY) : base(2, new List<Point> { p })
+    public Fixation(Point p) : base(2, new List<Point> { p }) 
     {
         p.isFixed = true;
-        x = newX;
-        y = newY;
     }
 
-    public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
+    public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
     {
         int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
-        m[equationNumber, 2 * column] = 1.0f;
-        m[equationNumber + 1, 2 * column + 1] = 1.0f;
-        //both might as well be zero
-        b[equationNumber, 0] = -(x - pointList[0].x);
-        b[equationNumber + 1, 0] = -(y - pointList[0].y);
+        m[equationNumber, 2 * column] = 1.0;
+        m[equationNumber + 1, 2 * column + 1] = 1.0;
+
+        b[equationNumber, 0] = 0.0;
+        b[equationNumber + 1, 0] = 0.0;
+    }
+
+    public override void FillJacobian(Matrix<double> a, Matrix<double> x, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    {
+        //протестировать диагональную матрицу, может сработает
+        int column = pointList[0].columnID == -1 ? startingColumnP : pointList[0].columnID;
+        FillDiagonalValue(a, column);
+        a[startingColumnL, startingColumnL] = 1.0;
+        a[startingColumnL + 1, startingColumnL + 1] = 1.0;
+    }
+
+    public override double EstimateError(Matrix<double> deltas)
+    {
+        return 0.0;
     }
 }
 
@@ -422,14 +645,14 @@ public class Fixation : Constraint
 public class Alignment : Constraint
 {
     public Alignment(Point p1, Point p2) : base(2, new List<Point> { p1, p2 }) { }
-    public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
+    public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
     {
         //о5 костыли
         if (!pointList[0].IsOrigin())
         {
             int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
-            m[equationNumber, 2 * column] = -1.0f;
-            m[equationNumber + 1, 2 * column + 1] = -1.0f;
+            m[equationNumber, 2 * column] = -1.0;
+            m[equationNumber + 1, 2 * column + 1] = -1.0;
             if (pointList[0].columnID == -1)
             {
                 startingColumn++;
@@ -438,11 +661,55 @@ public class Alignment : Constraint
         if (!pointList[1].IsOrigin())
         {
             int column = pointList[1].columnID == -1 ? startingColumn : pointList[1].columnID;
-            m[equationNumber, 2 * column] = 1.0f;
-            m[equationNumber + 1, 2 * column + 1] = 1.0f;
+            m[equationNumber, 2 * column] = 1.0;
+            m[equationNumber + 1, 2 * column + 1] = 1.0;
         }
         b[equationNumber, 0] = -(pointList[1].x - pointList[0].x);
         b[equationNumber + 1, 0] = -(pointList[1].y - pointList[0].y);
+    }
+
+    public override void FillJacobian(Matrix<double> a, Matrix<double> deltas, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    {
+        b[startingColumnL, 0] = pointList[1].x - pointList[0].x;
+        b[startingColumnL + 1, 0] = pointList[1].y - pointList[0].y;
+        if (!pointList[0].IsOrigin() && !pointList[0].isFixed)
+        {
+            int column = pointList[0].columnID == -1 ? startingColumnP : pointList[0].columnID;
+            FillDiagonalValue(a, column);
+            a[2 * column, startingColumnL] = -1.0;
+            a[2 * column + 1, startingColumnL + 1] = -1.0;
+            a[startingColumnL, 2 * column] = -1.0;
+            a[startingColumnL + 1, 2 * column + 1] = -1.0;
+            b[startingColumnL, 0] -= deltas[2 * column, 0];
+            b[startingColumnL + 1, 0] -= deltas[2 * column + 1, 0];
+
+            b[2 * column, 0] += deltas[2 * column, 0] - deltas[startingColumnL, 0];
+            b[2 * column + 1, 0] += deltas[2 * column + 1, 0] - deltas[startingColumnL + 1, 0];
+            if (pointList[0].columnID == -1)
+            {
+                startingColumnP++;
+            }
+        }
+        if (!pointList[1].IsOrigin() && !pointList[1].isFixed)
+        {
+            int column = pointList[1].columnID == -1 ? startingColumnP : pointList[1].columnID;
+            FillDiagonalValue(a, column);
+
+            a[2 * column, startingColumnL] = 1.0;
+            a[2 * column + 1, startingColumnL + 1] = 1.0;
+            a[startingColumnL, 2 * column] = 1.0;
+            a[startingColumnL + 1, 2 * column + 1] = 1.0;
+            b[startingColumnL, 0] += deltas[2 * column, 0];
+            b[startingColumnL + 1, 0] += deltas[2 * column + 1, 0];
+
+            b[2 * column, 0] += deltas[2 * column, 0] + deltas[startingColumnL, 0];
+            b[2 * column + 1, 0] += deltas[2 * column + 1, 0] + deltas[startingColumnL + 1, 0];
+        }
+    }
+
+    public override double EstimateError(Matrix<double> deltas)
+    {
+        return Math.Abs(pointList[0].x - pointList[1].x) + Math.Abs(pointList[0].y - pointList[1].y);
     }
 }
 
@@ -450,13 +717,13 @@ public class Verticality : Constraint
 {
     public Verticality(Point p1, Point p2) : base(1, new List<Point> { p1, p2 }) { }
 
-    public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
+    public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
     {
         //да как так-то а
         if (!pointList[0].IsOrigin())
         {
             int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
-            m[equationNumber, 2 * column] = -1.0f;
+            m[equationNumber, 2 * column] = -1.0;
             if (pointList[0].columnID == -1)
             {
                 startingColumn++;
@@ -465,9 +732,20 @@ public class Verticality : Constraint
         if (!pointList[1].IsOrigin())
         {
             int column = pointList[1].columnID == -1 ? startingColumn : pointList[1].columnID;
-            m[equationNumber, 2 * column] = 1.0f;
+            m[equationNumber, 2 * column] = 1.0;
         }
         b[equationNumber, 0] = -(pointList[1].x - pointList[0].x);
+    }
+
+    public override void FillJacobian(Matrix<double> a, Matrix<double> x, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    {
+
+    }
+
+    public override double EstimateError(Matrix<double> deltas)
+    {
+        //TODO change to real value
+        return 0.0;
     }
 }
 
@@ -475,12 +753,12 @@ public class Horizontality : Constraint
 {
     public Horizontality(Point p1, Point p2) : base(1, new List<Point> { p1, p2 }) { }
 
-    public override void FillDerivatives(Matrix<float> m, int equationNumber, Matrix<float> b, int startingColumn = -1)
+    public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
     {
         if (!pointList[0].IsOrigin())
         {
             int column = pointList[0].columnID == -1 ? startingColumn : pointList[0].columnID;
-            m[equationNumber, 2 * column + 1] = -1.0f;
+            m[equationNumber, 2 * column + 1] = -1.0;
             if (pointList[0].columnID == -1)
             {
                 startingColumn++;
@@ -489,8 +767,19 @@ public class Horizontality : Constraint
         if (!pointList[1].IsOrigin())
         {
             int column = pointList[1].columnID == -1 ? startingColumn : pointList[1].columnID;
-            m[equationNumber, 2 * column + 1] = 1.0f;
+            m[equationNumber, 2 * column + 1] = 1.0;
         }
         b[equationNumber, 0] = -(pointList[1].y - pointList[0].y);
+    }
+
+    public override void FillJacobian(Matrix<double> a, Matrix<double> x, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    {
+
+    }
+
+    public override double EstimateError(Matrix<double> deltas)
+    {
+        //TODO change to real value
+        return 0.0;
     }
 }
