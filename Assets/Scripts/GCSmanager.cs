@@ -16,7 +16,7 @@ public class GCSmanager : MonoBehaviour
     //иногда 1 ограничение порождает 2 уравнения в системе
     //хз, какой костыль лучше
     public int equationCount = 0;
-    public double precision = 1E-8;
+    public static double precision = 1E-8;
     //точка начала координат, характерный id = -1
     [HideInInspector]
     public static Point origin = new Point(0.0, 0.0, -1);
@@ -43,12 +43,21 @@ public class GCSmanager : MonoBehaviour
         segments = new List<Segment>();
 
      
-        CreatePoint(-900.1, 1.1);
-        CreatePoint(10, 0);
-        CreatePoint(500.3, 5);
-        AddConstraint(new Fixation(points[2]));
-        AddConstraint(new Alignment(points[1], points[2]));
-        AddConstraint(new Alignment(points[1], points[0]));
+        CreatePoint(-90000.1, 1.1);
+        CreatePoint(10, -777.777);
+        CreatePoint(500.3034, 5);
+        //AddConstraint(new Alignment(points[0], points[2]));
+        //AddConstraint(new Horizontality(points[0], points[1]));
+        //AddConstraint(new Alignment(points[2], points[0]));
+        AddConstraint(new Verticality(points[0], points[1]));
+        AddConstraint(new Horizontality(points[0], points[1]));
+
+        //AddConstraint(new Verticality(points[1], points[2]));
+        //AddConstraint(new Fixation(points[0]));
+
+        //AddConstraint(new Fixation(points[2]));
+        //AddConstraint(new Alignment(points[1], points[2]));
+        //AddConstraint(new Alignment(points[1], points[0]));
         //AddConstraint(new Fixation(points[1]));
 
         //AddConstraint(new Verticality(points[0], points[1]));
@@ -241,6 +250,13 @@ public class GCSmanager : MonoBehaviour
         {
             addP = probe.InactivePoints();
             addL = probe.lambdas;
+            foreach (Point p in probe.uniquePoints)
+            {
+                if (p.columnID == -1 && !p.IsOrigin())
+                {
+                    backup.Add((p.x, p.y));
+                }
+            }
         }
         consDeltas = Matrix<double>.Build.Dense((constraintedPoints.Count + addP) * 2 + equationCount + addL, 1);
         while (iterations < 50 && EvaluateError(probe))
@@ -250,10 +266,35 @@ public class GCSmanager : MonoBehaviour
             UpdatePointValues(probe);
             iterations++;
         }
-
-        return !EvaluateError();
+        if (EvaluateError(probe))
+        {
+            RestorePointvalues(backup, probe);
+        }
+        return !EvaluateError(probe);
     }
 
+    private void RestorePointvalues(List<(double, double)> backup, Constraint probe = null)
+    {
+        for (int i = 0; i < constraintedPoints.Count; ++i)
+        {
+            constraintedPoints[i].x = backup[i].Item1;
+            constraintedPoints[i].y = backup[i].Item2;
+        }
+
+        if (probe != null)
+        {
+            int index = constraintedPoints.Count;
+            foreach(Point p in probe.uniquePoints)
+            {
+                if (p.columnID == -1 && !p.IsOrigin())
+                {
+                    p.x = backup[index].Item1;
+                    p.y = backup[index].Item2;
+                    index++;
+                }
+            }
+        }
+    }
     private bool EvaluateError(Constraint probe = null)
     {
         double err = 0;
@@ -267,7 +308,7 @@ public class GCSmanager : MonoBehaviour
             err += probe.EstimateError(consDeltas);
         }
         //считать квадраты?
-        return err > precision;
+        return err >= precision;
     }
     private void UpdatePointValues(Constraint probe = null)
     {
@@ -365,6 +406,7 @@ public class GCSmanager : MonoBehaviour
                     Debug.Log("win");
                     return true;
                 }
+
             }
             //проверяем совместность, привет Кронекеру
             //только, кажется, не работает
@@ -413,7 +455,7 @@ public class Point
 
     public void LogPosition()
     {
-        Debug.Log(x + " ; " + y);
+        Debug.Log((float)x + " ; " + (float)y);
     }
 
     public bool IsOrigin()
@@ -737,15 +779,42 @@ public class Verticality : Constraint
         b[equationNumber, 0] = -(pointList[1].x - pointList[0].x);
     }
 
-    public override void FillJacobian(Matrix<double> a, Matrix<double> x, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    public override void FillJacobian(Matrix<double> a, Matrix<double> deltas, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
     {
+        b[startingColumnL, 0] = pointList[1].x - pointList[0].x;
+        if (!pointList[0].IsOrigin() && !pointList[0].isFixed)
+        {
+            int column = pointList[0].columnID == -1 ? startingColumnP : pointList[0].columnID;
+            FillDiagonalValue(a, column);
 
+            b[startingColumnL, 0] -= deltas[2 * column, 0];
+            b[2 * column, 0] += deltas[2 * column, 0] - deltas[startingColumnL, 0];
+            a[2 * column, startingColumnL] = -1.0;
+            a[startingColumnL, 2 * column] = -1.0;
+
+
+            if (pointList[0].columnID == -1)
+            {
+                startingColumnP++;
+            }
+        }
+        if (!pointList[1].IsOrigin() && !pointList[1].isFixed)
+        {
+            int column = pointList[1].columnID == -1 ? startingColumnP : pointList[1].columnID;
+            FillDiagonalValue(a, column);
+
+            b[startingColumnL, 0] += deltas[2 * column, 0];
+            b[2 * column, 0] += deltas[2 * column, 0] + deltas[startingColumnL, 0];
+            a[2 * column, startingColumnL] = 1.0;
+            a[startingColumnL, 2 * column] = 1.0;
+        }
     }
 
     public override double EstimateError(Matrix<double> deltas)
     {
-        //TODO change to real value
-        return 0.0;
+        //проверка на p1.y != p0.y?
+        //return Math.Abs(pointList[1].x - pointList[0].x);
+        return Math.Abs(pointList[1].y - pointList[0].y) < GCSmanager.precision ? GCSmanager.precision : Math.Abs(pointList[1].x - pointList[0].x);
     }
 }
 
@@ -772,14 +841,40 @@ public class Horizontality : Constraint
         b[equationNumber, 0] = -(pointList[1].y - pointList[0].y);
     }
 
-    public override void FillJacobian(Matrix<double> a, Matrix<double> x, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    public override void FillJacobian(Matrix<double> a, Matrix<double> deltas, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
     {
+        b[startingColumnL, 0] = pointList[1].y - pointList[0].y;
+        if (!pointList[0].IsOrigin() && !pointList[0].isFixed)
+        {
+            int column = pointList[0].columnID == -1 ? startingColumnP : pointList[0].columnID;
+            FillDiagonalValue(a, column);
 
+            b[startingColumnL, 0] -= deltas[2 * column + 1, 0];
+            b[2 * column + 1, 0] += deltas[2 * column + 1, 0] - deltas[startingColumnL, 0];
+            a[2 * column + 1, startingColumnL] = -1.0;
+            a[startingColumnL, 2 * column + 1] = -1.0;
+
+
+            if (pointList[0].columnID == -1)
+            {
+                startingColumnP++;
+            }
+        }
+        if (!pointList[1].IsOrigin() && !pointList[1].isFixed)
+        {
+            int column = pointList[1].columnID == -1 ? startingColumnP : pointList[1].columnID;
+            FillDiagonalValue(a, column);
+
+            b[startingColumnL, 0] += deltas[2 * column + 1, 0];
+            b[2 * column + 1, 0] += deltas[2 * column + 1, 0] + deltas[startingColumnL, 0];
+            a[2 * column + 1, startingColumnL] = 1.0;
+            a[startingColumnL, 2 * column + 1] = 1.0;
+        }
     }
 
     public override double EstimateError(Matrix<double> deltas)
     {
-        //TODO change to real value
-        return 0.0;
+        //return Math.Abs(pointList[1].y - pointList[0].y);
+        return Math.Abs(pointList[1].x - pointList[0].x) < GCSmanager.precision ? GCSmanager.precision : Math.Abs(pointList[1].y - pointList[0].y);
     }
 }
