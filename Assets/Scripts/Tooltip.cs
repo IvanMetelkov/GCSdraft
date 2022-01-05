@@ -20,11 +20,23 @@ public class Tooltip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 
     public void OnMouseEnter()
     {
-        WindowManager.ShowToolTip(text, new Vector2(Input.mousePosition.x, Input.mousePosition.y - 35f));
+        if (!WindowManager.IsPointerOverUIObject())
+        {
+            List<GraphicComponent> overlaps = WindowManager.GetRaycastHit<GraphicComponent>();
+            string finalText = text;
+            if (overlaps.Count > 1)
+            {
+                finalText += ", ...";
+            }
+            WindowManager.ShowToolTip(finalText, new Vector2(Input.mousePosition.x, Input.mousePosition.y - 35f));
+        }
     }
 
     public void OnMouseExit()
     {
-        WindowManager.HideToolTip();
+        if (!WindowManager.IsPointerOverUIObject())
+        {
+            WindowManager.HideToolTip();
+        }
     }
 }

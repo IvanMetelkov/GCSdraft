@@ -71,7 +71,7 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: -1195351469
-  m_SortingLayer: 2
+  m_SortingLayer: 1
   m_SortingOrder: 0
   m_Sprite: {fileID: 21300000, guid: 7ae6995c700a6ca4f806ccbb682880b3, type: 3}
   m_Color: {r: 0.9622642, g: 0.9600085, b: 0.33134568, a: 1}
@@ -112,7 +112,7 @@ CircleCollider2D:
   m_UsedByComposite: 0
   m_Offset: {x: 0, y: 0}
   serializedVersion: 2
-  m_Radius: 3
+  m_Radius: 2.5
 --- !u!114 &558849623020695723
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -125,4 +125,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: faf6ddafd5c0da14eb295d6e25cf25fa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  baseCollider: {fileID: 0}
+  color: {r: 0, g: 0, b: 0, a: 0}
+  tooltipName: 
+  tooltip: {fileID: 0}

@@ -10,9 +10,10 @@ public class GCSmanager : MonoBehaviour
     private List<Constraint> constraints;
     private List<Constraint> failedConstraints;
     //список точек
-    private List<Point> points;
+    [HideInInspector]
+    public List<Point> points;
     //список отрезков
-    private List<Segment> segments;
+    public List<Segment> segments;
     //иногда 1 ограничение порождает 2 уравнения в системе
     //хз, какой костыль лучше
     public int equationCount = 0;
@@ -21,6 +22,8 @@ public class GCSmanager : MonoBehaviour
     public static Point origin = new Point(0.0, 0.0, -1);
     public static Point OX = new Point(1.0, 0.0, -2);
     public static Point OY = new Point(0.0, 1.0, -3);
+    public static Segment ox = new Segment(origin, OX);
+    public static Segment oy = new Segment(origin, OY);
     [HideInInspector]
     public List<Point> constraintedPoints;
     private Matrix<double> matrixNF;
@@ -46,12 +49,12 @@ public class GCSmanager : MonoBehaviour
         segments = new List<Segment>();
 
      
-        CreatePoint(-90000.1, 1.1);
+        /*CreatePoint(-90000.1, 1.1);
         CreatePoint(10, -777.777);
         CreatePoint(500.3034, 5);
         AddConstraint(new Alignment(points[0], points[2]));
         AddConstraint(new Horizontality(points[0], points[1]));
-        AddConstraint(new Verticality(points[2], points[1]));
+        AddConstraint(new Verticality(points[2], points[1]));*/
         //AddConstraint(new Verticality(points[0], points[1]));
        // AddConstraint(new Horizontality(points[0], points[1]));
 
@@ -103,11 +106,6 @@ public class GCSmanager : MonoBehaviour
         //Debug.Log(consJacobian.ToString());
         //Debug.Log(consDeltas.ToString());
         //Debug.Log(consB.ToString());
-    }
-
-    void Update()
-    {
-        
     }
 
     private void UpdatePoints()
@@ -436,6 +434,7 @@ public class Point
     //как минимум уникальный идентификатор, чтобы точки можно было
     //отличать от друг друга
     public int pointID;
+    public Point2D graphic;
     //номер столбца, в котором эта точка входит в уравнение
     public int columnID;
     //чтобы отслеживать, перетащили ли только что точку, т.е,
@@ -604,6 +603,7 @@ public class Segment
 {
     public Point p1;
     public Point p2;
+    public Line2D graphic;
     public bool isOrigin = false;
     public Segment (Point p1, Point p2)
     {

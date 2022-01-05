@@ -6,7 +6,8 @@ public class Line2D : GraphicComponent
 {
     public Segment segment;
     public LineRenderer lineRenderer;
-    private EdgeCollider2D edgeCollider;
+    public EdgeCollider2D edgeCollider;
+    public static float startingEdgeRadius = 0.02f;
     public override void Awake()
     {
         edgeCollider = gameObject.GetComponent<EdgeCollider2D>();

@@ -68,7 +68,10 @@
     <Compile Include="Assets\Scripts\GCSmanager.cs" />
     <Compile Include="Assets\Scripts\GraphicComponent.cs" />
     <Compile Include="Assets\Scripts\Line2D.cs" />
+    <Compile Include="Assets\Scripts\ListComponentScript.cs" />
     <Compile Include="Assets\Scripts\Point2D.cs" />
+    <Compile Include="Assets\Scripts\PrimitiveButton.cs" />
+    <Compile Include="Assets\Scripts\ScalableGraphic.cs" />
     <Compile Include="Assets\Scripts\Tooltip.cs" />
     <Compile Include="Assets\Scripts\WindowManager.cs" />
     <None Include="Assets\packages\MathNet.Numerics.4.15.0\lib\netstandard2.0\MathNet.Numerics.xml" />
