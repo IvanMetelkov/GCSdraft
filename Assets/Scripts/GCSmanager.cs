@@ -18,8 +18,9 @@ public class GCSmanager : MonoBehaviour
     public int equationCount = 0;
     public static double precision = 1E-8;
     //точка начала координат, характерный id = -1
-    [HideInInspector]
     public static Point origin = new Point(0.0, 0.0, -1);
+    public static Point OX = new Point(1.0, 0.0, -2);
+    public static Point OY = new Point(0.0, 1.0, -3);
     [HideInInspector]
     public List<Point> constraintedPoints;
     private Matrix<double> matrixNF;
@@ -36,6 +37,8 @@ public class GCSmanager : MonoBehaviour
     {
         Random.InitState((int)DateTime.Now.Ticks);
         origin.isFixed = true;
+        OX.isFixed = true;
+        OY.isFixed = true;
         constraints = new List<Constraint>();
         failedConstraints = new List<Constraint>();
         points = new List<Point>();
@@ -46,11 +49,11 @@ public class GCSmanager : MonoBehaviour
         CreatePoint(-90000.1, 1.1);
         CreatePoint(10, -777.777);
         CreatePoint(500.3034, 5);
-        //AddConstraint(new Alignment(points[0], points[2]));
-        //AddConstraint(new Horizontality(points[0], points[1]));
-        //AddConstraint(new Alignment(points[2], points[0]));
-        AddConstraint(new Verticality(points[0], points[1]));
+        AddConstraint(new Alignment(points[0], points[2]));
         AddConstraint(new Horizontality(points[0], points[1]));
+        AddConstraint(new Verticality(points[2], points[1]));
+        //AddConstraint(new Verticality(points[0], points[1]));
+       // AddConstraint(new Horizontality(points[0], points[1]));
 
         //AddConstraint(new Verticality(points[1], points[2]));
         //AddConstraint(new Fixation(points[0]));
@@ -460,7 +463,7 @@ public class Point
 
     public bool IsOrigin()
     {
-        return pointID == -1;
+        return pointID < 0;
     }
 
     public void MarkConstraints()
@@ -601,6 +604,7 @@ public class Segment
 {
     public Point p1;
     public Point p2;
+    public bool isOrigin = false;
     public Segment (Point p1, Point p2)
     {
         this.p1 = p1;
@@ -642,6 +646,12 @@ public class Distance : Constraint
     public override void FillJacobian(Matrix<double> a, Matrix<double> x, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
     {
         //List<int> indices = PrepareColumns(startingColumnP);
+      /*  double c1 = pointList[1].x - pointList[0].x, c2 = pointList[1].y - pointList[0].y;
+        if (pointList[0].IsOrigin())
+        {
+            int column = pointList[0].columnID == -1 ? startingColumnP : pointList[0].columnID;
+
+        }*/
     }
 
     public override double EstimateError(Matrix<double> deltas)
@@ -814,7 +824,9 @@ public class Verticality : Constraint
     {
         //проверка на p1.y != p0.y?
         //return Math.Abs(pointList[1].x - pointList[0].x);
-        return Math.Abs(pointList[1].y - pointList[0].y) < GCSmanager.precision ? GCSmanager.precision : Math.Abs(pointList[1].x - pointList[0].x);
+        //return Math.Abs(pointList[1].y - pointList[0].y) < GCSmanager.precision ? GCSmanager.precision : Math.Abs(pointList[1].x - pointList[0].x);
+        return Math.Abs(pointList[1].y - pointList[0].y) == 0.0 ? GCSmanager.precision : Math.Abs(pointList[1].x - pointList[0].x);
+
     }
 }
 
@@ -875,6 +887,7 @@ public class Horizontality : Constraint
     public override double EstimateError(Matrix<double> deltas)
     {
         //return Math.Abs(pointList[1].y - pointList[0].y);
-        return Math.Abs(pointList[1].x - pointList[0].x) < GCSmanager.precision ? GCSmanager.precision : Math.Abs(pointList[1].y - pointList[0].y);
+        //return Math.Abs(pointList[1].x - pointList[0].x) < GCSmanager.precision ? GCSmanager.precision : Math.Abs(pointList[1].y - pointList[0].y);
+        return Math.Abs(pointList[1].x - pointList[0].x) == 0.0 ? GCSmanager.precision : Math.Abs(pointList[1].y - pointList[0].y);
     }
 }

@@ -64,7 +64,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets\Scripts\CameraController.cs" />
     <Compile Include="Assets\Scripts\GCSmanager.cs" />
+    <Compile Include="Assets\Scripts\GraphicComponent.cs" />
+    <Compile Include="Assets\Scripts\Line2D.cs" />
+    <Compile Include="Assets\Scripts\Point2D.cs" />
+    <Compile Include="Assets\Scripts\Tooltip.cs" />
+    <Compile Include="Assets\Scripts\WindowManager.cs" />
     <None Include="Assets\packages\MathNet.Numerics.4.15.0\lib\netstandard2.0\MathNet.Numerics.xml" />
     <Reference Include="UnityEngine">
       <HintPath>C:/Program Files/Unity/Hub/Editor/2019.4.26f1/Editor/Data/Managed/UnityEngine/UnityEngine.dll</HintPath>
@@ -609,6 +615,9 @@
     <Reference Include="Unity.Timeline.Editor">
       <HintPath>C:/Users/Иван/UnityProjects/GCSdraft/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
     </Reference>
+    <Reference Include="Unity.Toolchain.Win-x86_64-Linux-x86_64">
+      <HintPath>C:/Users/Иван/UnityProjects/GCSdraft/Library/ScriptAssemblies/Unity.Toolchain.Win-x86_64-Linux-x86_64.dll</HintPath>
+    </Reference>
     <Reference Include="Unity.2D.Animation.Runtime">
       <HintPath>C:/Users/Иван/UnityProjects/GCSdraft/Library/ScriptAssemblies/Unity.2D.Animation.Runtime.dll</HintPath>
     </Reference>
@@ -669,8 +678,14 @@
     <Reference Include="Unity.2D.Animation.Editor">
       <HintPath>C:/Users/Иван/UnityProjects/GCSdraft/Library/ScriptAssemblies/Unity.2D.Animation.Editor.dll</HintPath>
     </Reference>
+    <Reference Include="Unity.Sysroot.Linux_x86_64">
+      <HintPath>C:/Users/Иван/UnityProjects/GCSdraft/Library/ScriptAssemblies/Unity.Sysroot.Linux_x86_64.dll</HintPath>
+    </Reference>
     <Reference Include="Unity.Mathematics.Editor">
       <HintPath>C:/Users/Иван/UnityProjects/GCSdraft/Library/ScriptAssemblies/Unity.Mathematics.Editor.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.SysrootPackage.Editor">
+      <HintPath>C:/Users/Иван/UnityProjects/GCSdraft/Library/ScriptAssemblies/Unity.SysrootPackage.Editor.dll</HintPath>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
       <HintPath>C:/Users/Иван/UnityProjects/GCSdraft/Library/ScriptAssemblies/Unity.TextMeshPro.dll</HintPath>
