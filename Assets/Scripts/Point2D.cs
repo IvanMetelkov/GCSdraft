@@ -5,19 +5,22 @@ using UnityEngine;
 public class Point2D : GraphicComponent
 {
     public Point point;
+    public static float defaultScale = 0.15f;
     private SpriteRenderer spriteRenderer;
-    // Start is called before the first frame update
     public override void Awake()
     {
         spriteRenderer = gameObject.GetComponent<SpriteRenderer>();
         base.Awake();
     }
 
-    // Update is called once per frame
+    public void SetPosition()
+    {
+        transform.position = new Vector3((float)point.x, (float)point.y);
+    }
     public void UpdateValues()
     {
         tooltip.text = tooltipName;
         spriteRenderer.color = color;
-        transform.position = new Vector3((float)point.x, (float)point.y);
+        SetPosition();
     }
 }

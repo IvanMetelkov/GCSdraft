@@ -178,3 +178,4 @@ MonoBehaviour:
   tooltipName: 
   tooltip: {fileID: 0}
   lineRenderer: {fileID: 0}
+  edgeCollider: {fileID: 0}

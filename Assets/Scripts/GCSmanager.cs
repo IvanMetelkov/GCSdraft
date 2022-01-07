@@ -7,8 +7,9 @@ using MathNet.Numerics.LinearAlgebra;
 public class GCSmanager : MonoBehaviour
 {
     //список ограничений
-    private List<Constraint> constraints;
+    public List<Constraint> constraints;
     private List<Constraint> failedConstraints;
+    public static float constraintOffset = 20f;
     //список точек
     [HideInInspector]
     public List<Point> points;
@@ -22,8 +23,8 @@ public class GCSmanager : MonoBehaviour
     public static Point origin = new Point(0.0, 0.0, -1);
     public static Point OX = new Point(1.0, 0.0, -2);
     public static Point OY = new Point(0.0, 1.0, -3);
-    public static Segment ox = new Segment(origin, OX);
-    public static Segment oy = new Segment(origin, OY);
+    public static Segment ox = new Segment(origin, OX, -1);
+    public static Segment oy = new Segment(origin, OY, -2);
     [HideInInspector]
     public List<Point> constraintedPoints;
     private Matrix<double> matrixNF;
@@ -35,6 +36,7 @@ public class GCSmanager : MonoBehaviour
     //костыль, чтобы возвращать уникальные id точек
     //как вариант GUID
     public int pointsCreated = 0;
+    public int segmentsCreated = 0;
 
     void Awake()
     {
@@ -115,8 +117,10 @@ public class GCSmanager : MonoBehaviour
             //нет ну а что
             if (constraintedPoints[i].constraintCount <= 0)
             {
-                matrixNF.RemoveColumn(2 * i + 1);
-                matrixNF.RemoveColumn(2 * i);
+                matrixNF = matrixNF.RemoveColumn(2 * i + 1);
+                matrixNF = matrixNF.RemoveColumn(2 * i);
+                constraintedPoints[i].columnID = -1;
+                Debug.Log("Unconstrained");
                 constraintedPoints.RemoveAt(i);
             }
         }
@@ -163,8 +167,8 @@ public class GCSmanager : MonoBehaviour
                 //съедаем матрицу
                 for (int j = 0; j < constraints[i].lambdas; ++j)
                 {
-                    matrixNF.RemoveRow(constraints[i].startingEquation);
-                    freeVector.RemoveRow(constraints[i].startingEquation);
+                    matrixNF = matrixNF.RemoveRow(constraints[i].startingEquation);
+                    freeVector = freeVector.RemoveRow(constraints[i].startingEquation);
                 }
 
                 if (constraints[i].GetType() == typeof(Fixation))
@@ -172,7 +176,12 @@ public class GCSmanager : MonoBehaviour
                     Fixation tmp = (Fixation)constraints[i];
                     tmp.pointList[0].isFixed = false;
                 }
-
+                equationCount -= constraints[i].lambdas;
+                foreach(Point p in constraints[i].uniquePoints)
+                {
+                    p.relatedConstraints.RemoveAt(p.relatedConstraints.FindIndex(c => c.startingEquation == constraints[i].startingEquation));
+                }
+                Destroy(constraints[i].graphic.gameObject);
                 constraints.RemoveAt(i);
             }
         }
@@ -194,7 +203,7 @@ public class GCSmanager : MonoBehaviour
 
     //функция, вызываемая при попытке добавления
     //ограничения
-    public void AddConstraint(Constraint constraint)
+    public bool AddConstraint(Constraint constraint)
     {
         //если уравнений в СЛАУ вообще еще нет,
         //то точно можно добавлять
@@ -210,10 +219,11 @@ public class GCSmanager : MonoBehaviour
             //BuildJacobian();
             _ = Solve();
 
-           /* consDeltas = consJacobian.Solve(consB);
-            Debug.Log(consJacobian.ToString());
-            Debug.Log(consDeltas.ToString());
-            Debug.Log(consB.ToString());*/
+            /* consDeltas = consJacobian.Solve(consB);
+             Debug.Log(consJacobian.ToString());
+             Debug.Log(consDeltas.ToString());
+             Debug.Log(consB.ToString());*/
+            return true;
         }
         else
         //если уже полностью определена,
@@ -223,6 +233,7 @@ public class GCSmanager : MonoBehaviour
             constraint.RegisterConstraint(constraintedPoints, equationCount);
             constraints.Add(constraint);
             equationCount += constraint.lambdas;
+            return true;
         }
         else
         {
@@ -230,10 +241,11 @@ public class GCSmanager : MonoBehaviour
             if (constraint.GetType() == typeof(Fixation))
             {
                 Fixation tmp = (Fixation)constraint;
-                tmp.pointList[0].isFixed = false;
+                tmp.pointList[0].isFixed = tmp.previousState;
             }
+            Debug.Log("lose");
+            return false;
         }
-
     }
 
     public bool Solve(Constraint probe = null)
@@ -274,6 +286,23 @@ public class GCSmanager : MonoBehaviour
         return !EvaluateError(probe);
     }
 
+    public void MoveGraphics()
+    {
+        foreach (Constraint constraint in constraints)
+        {
+            constraint.DrawConstraint();
+        }
+
+        foreach(Point p in constraintedPoints)
+        {
+            p.graphic.SetPosition();
+        }
+
+        foreach(Segment s in segments)
+        {
+            s.graphic.DrawSegment();
+        }
+    }
     private void RestorePointvalues(List<(double, double)> backup, Constraint probe = null)
     {
         for (int i = 0; i < constraintedPoints.Count; ++i)
@@ -340,8 +369,8 @@ public class GCSmanager : MonoBehaviour
         //о5 съедаем матрицу
         for (int j = 0; j < constraint.lambdas; ++j)
         {
-            matrixNF.RemoveRow(constraint.startingEquation);
-            freeVector.RemoveRow(constraint.startingEquation);
+            matrixNF = matrixNF.RemoveRow(constraint.startingEquation);
+            freeVector = freeVector.RemoveRow(constraint.startingEquation);
         }
 
         if (constraint.GetType() == typeof(Fixation))
@@ -350,7 +379,14 @@ public class GCSmanager : MonoBehaviour
             tmp.pointList[0].isFixed = false;
         }
 
+        foreach (Point p in constraint.uniquePoints)
+        {
+            p.relatedConstraints.RemoveAt(p.relatedConstraints.FindIndex(c => c.startingEquation == constraint.startingEquation));
+        }
+        equationCount -= constraint.lambdas;
+
         constraints.RemoveAt(constraints.FindIndex(c => c.startingEquation == constraint.startingEquation));
+
         int startingEquation = 0;
         foreach (Constraint c in constraints)
         {
@@ -361,8 +397,35 @@ public class GCSmanager : MonoBehaviour
     public void DeletePoint(Point point)
     {
         point.MarkConstraints();
+        if (point.relatedSegments.Count > 0)
+        {
+            WindowManager.segmentsToDelete = point.relatedSegments;
+            foreach (Segment s in point.relatedSegments)
+            {
+                s.RemoveSegmentReference(point);
+                segments.RemoveAt(segments.FindIndex(seg => seg.segmentID == s.segmentID));
+            }
+            //point.relatedSegments.Clear();
+        }
         UpdatePoints();
         points.RemoveAt(points.FindIndex(p => p.pointID == point.pointID));
+        UpdateConstraints();
+    }
+
+    public void DeleteSegment(Segment segment)
+    {
+        foreach (Constraint constraint in segment.constraints)
+        {
+            constraint.toBeDeleted = true;
+            constraint.MarkPoints();
+
+            //не уверен, что нужно прям в цикле
+            //but better be safe than sorry
+            //UpdatePoints();
+            //UpdateConstraints();
+        }
+        UpdatePoints();
+        segments.RemoveAt(segments.FindIndex(s => s.segmentID == segment.segmentID));
         UpdateConstraints();
     }
 
@@ -395,9 +458,10 @@ public class GCSmanager : MonoBehaviour
         {
             //Matrix<double> augumented = tmpA.Append(tmpB);
             consDeltas = Matrix<double>.Build.Dense((constraintedPoints.Count + pointsToAdd) * 2 + equationCount + constraint.lambdas, 1);
+           // Debug.Log(constraintedPoints.Count + " " + constraints.Count);
             BuildJacobian(constraint);
-            Debug.Log(consJacobian.Rank());
-            Debug.Log(consJacobian.ToString());
+           // Debug.Log(consJacobian.Rank());
+           // Debug.Log(consJacobian.ToString());
             if (consJacobian.Rank() == (constraintedPoints.Count + pointsToAdd) * 2 + equationCount + constraint.lambdas)
             {
                 if (Solve(constraint))
@@ -419,7 +483,6 @@ public class GCSmanager : MonoBehaviour
                 return true;
             }*/
         }
-        Debug.Log("lose");
         return false;
     }
 
@@ -445,6 +508,7 @@ public class Point
     public double x;
     public double y;
     public List<Constraint> relatedConstraints;
+    public List<Segment> relatedSegments = new List<Segment>();
 
     public Point(double x, double y, int id)
     {
@@ -469,8 +533,11 @@ public class Point
     {
         foreach (Constraint constraint in relatedConstraints)
         {
-            constraint.toBeDeleted = true;
-            constraint.MarkPoints();
+           // if (!constraint.toBeDeleted)
+         //   {
+                constraint.toBeDeleted = true;
+                constraint.MarkPoints();
+          //  }
         }
     }
   
@@ -486,6 +553,7 @@ abstract public class Constraint
     public List<Point> uniquePoints;
     public int startingEquation;
     public bool toBeDeleted = false;
+    public Constraint2D graphic;
    // public int consEquations;
     public Constraint(int lambdas, List<Point> points)
     {
@@ -496,6 +564,8 @@ abstract public class Constraint
       //  consEquations = uniquePoints.Count * 2 + lambdas;
     }
 
+    public abstract void DrawConstraint();
+
     private void FindUniquePoints()
     {
         foreach (Point p in pointList)
@@ -503,7 +573,6 @@ abstract public class Constraint
             if (!p.IsOrigin() && !uniquePoints.Exists(point => point.pointID == p.pointID))
             {
                 uniquePoints.Add(p);
-                p.constraintCount++;
             }
         }
     }
@@ -531,6 +600,7 @@ abstract public class Constraint
         foreach (Point p in uniquePoints)
         {
             AddPoint(p, constraintedPoints);
+            p.constraintCount++;
         }
     }
 
@@ -591,7 +661,7 @@ abstract public class Constraint
         {
             p.columnID = constraintedPoints.Count;
             constraintedPoints.Add(p);
-            p.relatedConstraints.Add(this);
+            //p.relatedConstraints.Add(this);
         }
     }
 
@@ -605,10 +675,27 @@ public class Segment
     public Point p2;
     public Line2D graphic;
     public bool isOrigin = false;
-    public Segment (Point p1, Point p2)
+    public int segmentID;
+    public List<Constraint> constraints = new List<Constraint>();
+    public Segment (Point p1, Point p2, int id)
     {
         this.p1 = p1;
         this.p2 = p2;
+        segmentID = id;
+    }
+
+    public void RemoveSegmentReference(Point p = null)
+    {
+        if (p == null)
+        {
+            p1.relatedSegments.RemoveAt(p1.relatedSegments.FindIndex(s => s.segmentID == segmentID));
+            p2.relatedSegments.RemoveAt(p2.relatedSegments.FindIndex(s => s.segmentID == segmentID));
+        }
+        else
+        {
+            Point otherEnd = p1.pointID == p.pointID ? p2 : p1;
+            otherEnd.relatedSegments.RemoveAt(otherEnd.relatedSegments.FindIndex(s => s.segmentID == segmentID));
+        }
     }
 }
 
@@ -654,6 +741,11 @@ public class Distance : Constraint
         }*/
     }
 
+    public override void DrawConstraint()
+    {
+        
+    }
+
     public override double EstimateError(Matrix<double> deltas)
     {
         return Math.Abs(Math.Pow(pointList[0].x - pointList[1].x, 2.0) + Math.Pow(pointList[0].y - pointList[1].y, 2.0) - Math.Pow(distance, 2.0));
@@ -662,8 +754,10 @@ public class Distance : Constraint
 
 public class Fixation : Constraint
 {
+    public bool previousState;
     public Fixation(Point p) : base(2, new List<Point> { p }) 
     {
+        previousState = p.isFixed;
         p.isFixed = true;
     }
 
@@ -684,6 +778,11 @@ public class Fixation : Constraint
         FillDiagonalValue(a, column);
         a[startingColumnL, startingColumnL] = 1.0;
         a[startingColumnL + 1, startingColumnL + 1] = 1.0;
+    }
+
+    public override void DrawConstraint()
+    {
+        graphic.gameObject.transform.position = new Vector3((float)pointList[0].x, (float)pointList[0].y, 0f);
     }
 
     public override double EstimateError(Matrix<double> deltas)
@@ -720,6 +819,10 @@ public class Alignment : Constraint
         b[equationNumber + 1, 0] = -(pointList[1].y - pointList[0].y);
     }
 
+    public override void DrawConstraint()
+    {
+        graphic.gameObject.transform.position = new Vector3((float)pointList[0].x, (float)pointList[0].y, 0f);
+    }
     public override void FillJacobian(Matrix<double> a, Matrix<double> deltas, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
     {
         b[startingColumnL, 0] = pointList[1].x - pointList[0].x;
@@ -789,6 +892,10 @@ public class Verticality : Constraint
         b[equationNumber, 0] = -(pointList[1].x - pointList[0].x);
     }
 
+    public override void DrawConstraint()
+    {
+
+    }
     public override void FillJacobian(Matrix<double> a, Matrix<double> deltas, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
     {
         b[startingColumnL, 0] = pointList[1].x - pointList[0].x;
@@ -884,6 +991,10 @@ public class Horizontality : Constraint
         }
     }
 
+    public override void DrawConstraint()
+    {
+
+    }
     public override double EstimateError(Matrix<double> deltas)
     {
         //return Math.Abs(pointList[1].y - pointList[0].y);

@@ -8,6 +8,7 @@ public class WindowManager : MonoBehaviour
 {
     public static GameObject toolTip;
     private static GameObject quickMenu;
+    private Transform graphicsHolder;
     private Canvas canvas;
     public static float tooltipOffset = 30.0f;
     public static GameObject axisText;
@@ -15,10 +16,17 @@ public class WindowManager : MonoBehaviour
     private GameObject pointPrefab;
     [SerializeField]
     private GameObject linePrefab;
+    [SerializeField]
+    private GameObject fixationConstraintPrefab;
+    [SerializeField]
+    private GameObject alignmentPrefab;
+    [SerializeField]
+    private GameObject genericConstraint;
     private GCSmanager gcsManager;
     public static bool primitiveDrawMode = false;
     public static bool constraintDrawMode = false;
     public static GraphicType graphicType = GraphicType.None;
+    public static ConstraintType constraintType = ConstraintType.None;
     public static List<Point> tempPoints;
     [SerializeField]
     private GameObject listPrefab;
@@ -27,24 +35,31 @@ public class WindowManager : MonoBehaviour
     private Sprite pointImage;
     [SerializeField]
     private Sprite segmentImage;
+    [SerializeField]
+    private Sprite[] constraintSprites;
+    public static int inversedPointCount = -4;
+    public static GraphicComponent componentToDelete = null;
+    public static List<Segment> segmentsToDelete = new List<Segment>();
+    public static List<Segment> tempSegments = new List<Segment>();
 
     void Awake()
     {
         gcsManager = gameObject.GetComponent<GCSmanager>();
         SetupUI();
+        graphicsHolder = new GameObject("Graphics").transform;
         GCSmanager.ox.isOrigin = true;
         GCSmanager.oy.isOrigin = true;
         axisText = GameObject.Find("OriginAxis");
         DrawNewSegment(GCSmanager.ox, "X-axis", Color.red);
         DrawNewSegment(GCSmanager.oy, "Y-axis", Color.green);
         DrawNewPoint(GCSmanager.origin, "Origin-(0,0)", Color.white);
-        SetupScale(GCSmanager.ox.graphic.gameObject, new Vector3(1f, 1f, 1f));
-        SetupScale(GCSmanager.oy.graphic.gameObject, new Vector3(1f, 1f, 1f));
-        SetupScale(axisText, new Vector3(0.01f, 0.01f, 1));
+        SetupScale(GCSmanager.ox.graphic.gameObject, new Vector3(Line2D.defaultScale, Line2D.defaultScale, 1f));
+        SetupScale(GCSmanager.oy.graphic.gameObject, new Vector3(Line2D.defaultScale, Line2D.defaultScale, 1f));
+        SetupScale(axisText, new Vector3(0.05f, 0.05f, 1));
         tempPoints = new List<Point>();
-}
+    }
 
-public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTransform = true)
+    public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTransform = true)
     {
         ScalableGraphic scaler = obj.AddComponent<ScalableGraphic>();
         scaler.startingScale = startingScale;
@@ -62,6 +77,10 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
         lineComponent.UpdateValues();
         lineComponent.DrawSegment();
         segment.graphic = lineComponent;
+        if (!segment.isOrigin)
+        {
+            instance.transform.SetParent(graphicsHolder);
+        }
     }
 
     public void DrawNewPoint(Point point, string toolTipText, Color color)
@@ -73,7 +92,11 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
         pointComponent.tooltipName = toolTipText;
         pointComponent.UpdateValues();
         point.graphic = pointComponent;
-        SetupScale(instance, new Vector3(0.03f, 0.03f, 1f));
+        SetupScale(instance, new Vector3(Point2D.defaultScale, Point2D.defaultScale, 1f));
+        if (!point.IsOrigin())
+        {
+            instance.transform.SetParent(graphicsHolder);
+        }
     }
 
     void SetupUI()
@@ -90,11 +113,12 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
     {
         foreach (Point p in tempPoints)
         {
-            if (p.pointID == -4)
+            if (p.pointID <= -4)
             {
                 Destroy(p.graphic.gameObject);
             }
         }
+        inversedPointCount = -4;
         tempPoints.Clear();
     }
 
@@ -102,7 +126,7 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
     {
         List<T> ans = new List<T>();
         Vector3 pos = Input.mousePosition;
-        pos.z = 10.0f;
+        pos.z = CameraController.cameraToPlaneDistance;
         pos = Camera.main.ScreenToWorldPoint(pos);
         Collider2D[] colliders = Physics2D.OverlapPointAll(pos);
         foreach (Collider2D collider in colliders)
@@ -114,7 +138,6 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
         }
         return ans;
     }
-    // Update is called once per frame
     void Update()
     {
         if (Input.GetMouseButtonDown(0) && quickMenu.activeSelf && !IsPointerOverUIObject())
@@ -125,34 +148,24 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
         if (Input.GetMouseButtonDown(0) && !IsPointerOverUIObject())
         {
             Vector3 pos = Input.mousePosition;
-            pos.z = 10.0f;
+            pos.z = CameraController.cameraToPlaneDistance;
             pos = Camera.main.ScreenToWorldPoint(pos);
             if (primitiveDrawMode)
             {
                 switch (graphicType)
                 {
-                    case (GraphicType.Point):
+                    case GraphicType.Point:
                         gcsManager.CreatePoint(pos.x, pos.y);
-                        string tooltipName = "Point" + (gcsManager.points.Count - 1).ToString();
+                        string tooltipName = "Point" + (gcsManager.pointsCreated - 1).ToString();
                         DrawNewPoint(gcsManager.points[gcsManager.points.Count - 1], tooltipName, Color.magenta);
                         break;
-                    case (GraphicType.Segment):
+                    case GraphicType.Segment:
                         List<Point2D> points = GetRaycastHit<Point2D>();
 
-                        if (points.Count == 1)
+                        if (points.Count == 0)
                         {
-                            
-                            tempPoints.Add(points[0].point);
-                        }
-                        else
-                        if (points.Count > 1)
-                        {
-                            PopulateList(points);
-                            EnableQuickMenu();
-                        }
-                        else
-                        {
-                            Point tmp = new Point(pos.x, pos.y, -4);
+                            Point tmp = new Point(pos.x, pos.y, inversedPointCount);
+                            inversedPointCount--;
                             DrawNewPoint(tmp, "TempPoint" + tempPoints.Count.ToString(), Color.gray);
                             tempPoints.Add(tmp);
                             if (tempPoints.Count == 2)
@@ -160,8 +173,26 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
                                 FormNewSegment();
                             }
                         }
+                        else
+                        {
+                            FishForPoints(points);
+                        }
                         break;
-                    case (0):
+                    case 0:
+                        break;
+                }
+            }
+            else
+            if (constraintDrawMode)
+            {
+                List<Point2D> points = GetRaycastHit<Point2D>();
+                switch (constraintType)
+                {
+                    case ConstraintType.Fixation:
+                    case ConstraintType.Alignment:
+                        FishForPoints(points);
+                        break;
+                    case 0:
                         break;
                 }
             }
@@ -184,13 +215,59 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
             FormNewSegment();
         }
 
+        if (tempSegments.Count == 0 && constraintDrawMode && tempPoints.Count > 0)
+        {
+            FormNewPointConstraint();
+        }
+
+        if (!primitiveDrawMode && !constraintDrawMode && componentToDelete != null)
+        {
+            Type type = componentToDelete.GetType();
+            if (type == typeof(Point2D))
+            {
+                Point2D tmp = (Point2D)componentToDelete;
+                if (!tmp.point.IsOrigin())
+                {
+                    gcsManager.DeletePoint(tmp.point);
+                    Debug.Log(segmentsToDelete.Count);
+                    foreach (Segment s in segmentsToDelete)
+                    {
+                        Destroy(s.graphic.gameObject);
+                    }
+                    Destroy(tmp.gameObject);
+                    segmentsToDelete.Clear();
+                }
+            }
+            else
+            if (type == typeof(Line2D))
+            {
+                Line2D tmp = (Line2D)componentToDelete;
+                if (!tmp.segment.isOrigin)
+                {
+                    gcsManager.DeleteSegment(tmp.segment);
+                    tmp.segment.RemoveSegmentReference();
+                    Destroy(tmp.gameObject);
+                }
+            }
+            else
+            {
+                Debug.Log("delete");
+                Constraint2D tmp = (Constraint2D)componentToDelete;
+                gcsManager.DeleteConstraint(tmp.constraint);
+                Destroy(tmp.gameObject);
+                Debug.Log(gcsManager.constraintedPoints.Count);
+            }
+            componentToDelete = null;
+        }
+
         if (Input.GetKey(KeyCode.Delete) && !IsPointerOverUIObject() && !primitiveDrawMode && !constraintDrawMode)
         {
+            tempPoints.Clear();
             DisableQuickMenu();
-            List<GraphicComponent> points = GetRaycastHit<GraphicComponent>();
-            if (points.Count > 0)
+            List<GraphicComponent> graphics = GetRaycastHit<GraphicComponent>();
+            if (graphics.Count > 0)
             {
-                PopulateList(points);
+                PopulateList(graphics);
                 EnableQuickMenu();
             }
         }
@@ -200,35 +277,130 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
             primitiveDrawMode = false;
             constraintDrawMode = false;
             graphicType = 0;
+            constraintType = 0;
             ClearTemporaryGraphic();
             DisableQuickMenu();
         }
 
     }
 
+    private void FishForPoints(List<Point2D> points)
+    {
+        if (points.Count == 1)
+        {
+            tempPoints.Add(points[0].point);
+        }
+        else
+        if (points.Count > 1)
+        {
+            PopulateList(points);
+            EnableQuickMenu();
+        }
+    }
+
+    private Constraint2D DrawNewConstraint(Constraint constraint, string tooltipText)
+    {
+        GameObject instance;
+        if (constraintType == ConstraintType.Fixation)
+        {
+             instance = Instantiate(fixationConstraintPrefab);
+        }
+        else
+        if (constraintType == ConstraintType.Alignment)
+        {
+            instance = Instantiate(alignmentPrefab);
+        }
+        else
+        {
+            instance = Instantiate(genericConstraint);
+        }
+        Constraint2D constraintComponent = instance.GetComponent<Constraint2D>();
+        constraintComponent.constraint = constraint;
+        constraintComponent.tooltipName = tooltipText;
+        constraintComponent.tooltip.text = tooltipText;
+        SetupScale(constraintComponent.gameObject, new Vector3(Constraint2D.defaultScale, Constraint2D.defaultScale, 1f), true);
+        instance.transform.SetParent(graphicsHolder);
+        return constraintComponent;
+    }
+    private void FormNewPointConstraint()
+    {
+        switch (constraintType)
+        {
+            case ConstraintType.Fixation:
+                if (!tempPoints[0].IsOrigin())
+                {
+                    Fixation tmp = new Fixation(tempPoints[0]);
+                    if (gcsManager.AddConstraint(tmp))
+                    {
+                        tempPoints[0].relatedConstraints.Add(tmp);
+                        tmp.graphic = DrawNewConstraint(tmp, "Fixation:" + tempPoints[0].graphic.tooltipName);
+                        gcsManager.MoveGraphics();
+                    }
+                }
+                tempPoints.Clear();
+                break;
+            case ConstraintType.Alignment:
+                if (tempPoints.Count == 2)
+                {
+                    if (tempPoints[0].pointID != tempPoints[1].pointID)
+                    {
+                        Alignment tmp = new Alignment(tempPoints[0], tempPoints[1]);
+                        if (gcsManager.AddConstraint(tmp))
+                        {
+                            tempPoints[0].relatedConstraints.Add(tmp);
+                            tempPoints[1].relatedConstraints.Add(tmp);
+                            tmp.graphic = DrawNewConstraint(tmp, "Alignment: P" + tempPoints[0].pointID + ":P" +
+                                tempPoints[1].pointID);
+                            gcsManager.MoveGraphics();
+                        }
+                    }
+                    tempPoints.Clear();
+                }
+                break;
+            case 0:
+                tempPoints.Clear();
+                break;
+        }
+    }
+
     private void FormNewSegment()
     {
-        foreach (Point p in tempPoints)
+        if (tempPoints[0].pointID != tempPoints[1].pointID)
         {
-            if (p.pointID == -4)
+            foreach (Point p in tempPoints)
             {
-                p.graphic.color = Color.magenta;
-                p.graphic.tooltipName = "Point" + gcsManager.points.Count.ToString();
-                p.pointID = gcsManager.points.Count;
-                gcsManager.points.Add(p);
-                p.graphic.UpdateValues();
-                gcsManager.pointsCreated++;
+                if (p.pointID <= -4)
+                {
+                    p.graphic.color = Color.magenta;
+                    p.graphic.tooltipName = "Point" + gcsManager.pointsCreated.ToString();
+                    p.pointID = gcsManager.pointsCreated;
+                    gcsManager.points.Add(p);
+                    p.graphic.UpdateValues();
+                    gcsManager.pointsCreated++;
+                    p.graphic.gameObject.transform.SetParent(graphicsHolder);
+                }
             }
+            Segment newSegment = new Segment(tempPoints[0], tempPoints[1], gcsManager.segmentsCreated);
+            DrawNewSegment(newSegment, "Segment" + gcsManager.segmentsCreated.ToString(), Color.blue);
+            SetupScale(newSegment.graphic.gameObject, new Vector3(1f, 1f, 1f), false);
+            gcsManager.segments.Add(newSegment);
+            gcsManager.segmentsCreated++;
+            tempPoints[0].relatedSegments.Add(newSegment);
+            tempPoints[1].relatedSegments.Add(newSegment);
+            tempPoints.Clear();
+            inversedPointCount = -4;
         }
-        Segment newSegment = new Segment(tempPoints[0], tempPoints[1]);
-        DrawNewSegment(newSegment, "Segment" + gcsManager.segments.Count.ToString(), Color.blue);
-        SetupScale(newSegment.graphic.gameObject, new Vector3(1f, 1f, 1f), false);
-        gcsManager.segments.Add(newSegment);
-        tempPoints.Clear();
+        else
+        {
+            ClearTemporaryGraphic();
+        }
     }
     void EnableQuickMenu()
     {
         quickMenu.SetActive(true);
+        Vector3 screenPos = Input.mousePosition;
+        screenPos.x += 150f;
+        quickMenu.transform.position = screenPos;
         HideToolTip();
     }
 
@@ -256,6 +428,11 @@ public void SetupScale(GameObject obj, Vector3 startingScale, bool setScaleTrans
             if (list[i].GetType() == typeof(Line2D))
             {
                 img.sprite = segmentImage;
+            }
+            if (list[i].GetType() == typeof(Constraint2D))
+            {
+                Constraint2D tmp = (Constraint2D)(object)list[i];
+                img.sprite = constraintSprites[tmp.constraintNumber];
             }
 
             ListComponentScript content = obj.GetComponent<ListComponentScript>();
@@ -299,4 +476,13 @@ public enum GraphicType
     None = 0,
     Point = 1,
     Segment = 2
+}
+
+public enum ConstraintType
+{
+    None = 0,
+    Fixation = 1,
+    Alignment = 2,
+    Verticality = 3,
+    Horizontality = 4
 }

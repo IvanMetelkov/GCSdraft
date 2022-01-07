@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class CameraController : MonoBehaviour
 {
+    public static float cameraToPlaneDistance = 50f;
     Vector3 touchStart;
     bool dragFlag = false;
     float startingFOV;
@@ -27,7 +28,7 @@ public class CameraController : MonoBehaviour
             {
                 dragFlag = false;
                 touchStart = Input.mousePosition;
-                touchStart.z = 10.0f;
+                touchStart.z = cameraToPlaneDistance;
                 touchStart = Camera.main.ScreenToWorldPoint(touchStart);
             }
 
@@ -37,7 +38,7 @@ public class CameraController : MonoBehaviour
             if (!WindowManager.IsPointerOverUIObject() && !dragFlag)
             {
                 Vector3 tmp = Input.mousePosition;
-                tmp.z = 10.0f;
+                tmp.z = cameraToPlaneDistance;
                 Vector3 direction = touchStart - Camera.main.ScreenToWorldPoint(tmp);
                 Camera.main.transform.position += direction;
             }
@@ -46,7 +47,7 @@ public class CameraController : MonoBehaviour
         if (Input.GetKey(KeyCode.T))
         {
             Camera.main.fieldOfView = startingFOV;
-            Camera.main.transform.position = new Vector3(0f, 0f, -10f);
+            Camera.main.transform.position = new Vector3(0f, 0f, -cameraToPlaneDistance);
             UpdateScale();
         }
 
@@ -75,6 +76,16 @@ public class CameraController : MonoBehaviour
         foreach(Segment s in gcsManager.segments)
         {
             s.graphic.gameObject.GetComponent<ScalableGraphic>().ScaleTransform();
+        }
+
+        foreach(Point p in WindowManager.tempPoints)
+        {
+            p.graphic.gameObject.GetComponent<ScalableGraphic>().ScaleTransform();
+        }
+
+        foreach(Constraint c in gcsManager.constraints)
+        {
+            c.graphic.gameObject.GetComponent<ScalableGraphic>().ScaleTransform();
         }
     }
 }

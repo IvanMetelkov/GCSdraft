@@ -5,14 +5,20 @@ using UnityEngine;
 public class ListComponentScript : MonoBehaviour
 {
     public GraphicComponent graphicComponent;
-    // Start is called before the first frame update
     public void AddTempComponent()
     {
-        if (graphicComponent.GetType() == typeof(Point2D))
+        if ((WindowManager.primitiveDrawMode || WindowManager.constraintDrawMode) && graphicComponent.GetType() == typeof(Point2D))
         {
             Point2D tmp = (Point2D)graphicComponent;
             WindowManager.tempPoints.Add(tmp.point);
             WindowManager.DisableQuickMenu();
         }
+        else
+        if (!WindowManager.primitiveDrawMode && !WindowManager.constraintDrawMode)
+        {
+            WindowManager.componentToDelete = graphicComponent;
+            WindowManager.DisableQuickMenu();
+        }
+
     }
 }
