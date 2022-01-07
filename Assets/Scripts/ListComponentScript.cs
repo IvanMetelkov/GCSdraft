@@ -14,6 +14,13 @@ public class ListComponentScript : MonoBehaviour
             WindowManager.DisableQuickMenu();
         }
         else
+        if (WindowManager.constraintDrawMode && graphicComponent.GetType() == typeof(Line2D))
+        {
+            Line2D tmp = (Line2D)graphicComponent;
+            WindowManager.tempSegments.Add(tmp.segment);
+            WindowManager.DisableQuickMenu();
+        }
+        else
         if (!WindowManager.primitiveDrawMode && !WindowManager.constraintDrawMode)
         {
             WindowManager.componentToDelete = graphicComponent;

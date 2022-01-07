@@ -49,65 +49,6 @@ public class GCSmanager : MonoBehaviour
         points = new List<Point>();
         constraintedPoints = new List<Point>();
         segments = new List<Segment>();
-
-     
-        /*CreatePoint(-90000.1, 1.1);
-        CreatePoint(10, -777.777);
-        CreatePoint(500.3034, 5);
-        AddConstraint(new Alignment(points[0], points[2]));
-        AddConstraint(new Horizontality(points[0], points[1]));
-        AddConstraint(new Verticality(points[2], points[1]));*/
-        //AddConstraint(new Verticality(points[0], points[1]));
-       // AddConstraint(new Horizontality(points[0], points[1]));
-
-        //AddConstraint(new Verticality(points[1], points[2]));
-        //AddConstraint(new Fixation(points[0]));
-
-        //AddConstraint(new Fixation(points[2]));
-        //AddConstraint(new Alignment(points[1], points[2]));
-        //AddConstraint(new Alignment(points[1], points[0]));
-        //AddConstraint(new Fixation(points[1]));
-
-        //AddConstraint(new Verticality(points[0], points[1]));
-
-        //AddConstraint(new Distance(points[0], points[1], 10.0f));
-        //AddConstraint(new Alignment(points[0], origin));
-        //AddConstraint(new Distance(points[1], origin, 10.0f));
-        //AddConstraint(new Distance(points[0], points[1], 10.0f));
-
-        //AddConstraint(new Alignment(points[0], points[1]));
-        //AddConstraint(new Distance(points[0], points[1], 5.0f));
-        //CreatePoint(10, 10);
-        /*AddConstraint(new Fixation(points[0], points[0].x, points[0].y));
-        AddConstraint(new Distance(points[1], origin, 1.0f));
-        AddConstraint(new Distance(points[1], points[0], 10.0f));
-        AddConstraint(new Distance(points[1], points[0], 5.0f));
-
-        AddConstraint(new Fixation(points[0], points[0].x, points[0].y));
-        AddConstraint(new Fixation(points[1], points[1].x, points[1].y));
-        AddConstraint(new Fixation(points[0], points[0].x, points[0].y));
-        AddConstraint(new Fixation(points[1], points[1].x, points[1].y));
-        AddConstraint(new Fixation(points[1], points[1].x, points[1].y));*/
-
-        /*AddConstraint(new Distance(points[0], origin, 1.0f));
-        AddConstraint(new Distance(origin, points[1], 10.0f));
-        AddConstraint(new Distance(points[0], origin, 1.0f));
-        AddConstraint(new Distance(points[0], points[1], -1.0f));
-        AddConstraint(new Distance(points[0], points[1], 1.0f));*/
-
-
-
-        //Debug.Log(matrixNF.ToString());
-        //Debug.Log(freeVector.ToString());
-
-        foreach (Point p in points)
-        {
-            p.LogPosition();
-        }
-        //consDeltas = consJacobian.Solve(consB);
-        //Debug.Log(consJacobian.ToString());
-        //Debug.Log(consDeltas.ToString());
-        //Debug.Log(consB.ToString());
     }
 
     private void UpdatePoints()
@@ -176,11 +117,15 @@ public class GCSmanager : MonoBehaviour
                     Fixation tmp = (Fixation)constraints[i];
                     tmp.pointList[0].isFixed = false;
                 }
+                constraints[i].ReleaseSegments();
+
                 equationCount -= constraints[i].lambdas;
                 foreach(Point p in constraints[i].uniquePoints)
                 {
                     p.relatedConstraints.RemoveAt(p.relatedConstraints.FindIndex(c => c.startingEquation == constraints[i].startingEquation));
                 }
+
+
                 Destroy(constraints[i].graphic.gameObject);
                 constraints.RemoveAt(i);
             }
@@ -209,21 +154,28 @@ public class GCSmanager : MonoBehaviour
         //то точно можно добавлять
         if (equationCount == 0)
         {
-            matrixNF = Matrix<double>.Build.Dense(constraint.lambdas, constraint.uniquePoints.Count * 2);
-            freeVector = Matrix<double>.Build.Dense(constraint.lambdas, 1);
-            constraint.RegisterConstraint(constraintedPoints, 0);
-            constraint.FillDerivatives(matrixNF, equationCount, freeVector);
-            constraints.Add(constraint);
-            equationCount += constraint.lambdas;
-
-            //BuildJacobian();
-            _ = Solve();
+            if (Solve(constraint))
+            {
+                matrixNF = Matrix<double>.Build.Dense(constraint.lambdas, constraint.uniquePoints.Count * 2);
+                freeVector = Matrix<double>.Build.Dense(constraint.lambdas, 1);
+                constraint.RegisterConstraint(constraintedPoints, 0);
+                constraint.FillDerivatives(matrixNF, equationCount, freeVector);
+                constraints.Add(constraint);
+                equationCount += constraint.lambdas;
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+            //вырождение отрезка все-таки надо ловить
+            //_ = Solve();
 
             /* consDeltas = consJacobian.Solve(consB);
              Debug.Log(consJacobian.ToString());
              Debug.Log(consDeltas.ToString());
              Debug.Log(consB.ToString());*/
-            return true;
+            //return true;
         }
         else
         //если уже полностью определена,
@@ -378,7 +330,7 @@ public class GCSmanager : MonoBehaviour
             Fixation tmp = (Fixation)constraint;
             tmp.pointList[0].isFixed = false;
         }
-
+        constraint.ReleaseSegments();
         foreach (Point p in constraint.uniquePoints)
         {
             p.relatedConstraints.RemoveAt(p.relatedConstraints.FindIndex(c => c.startingEquation == constraint.startingEquation));
@@ -554,6 +506,7 @@ abstract public class Constraint
     public int startingEquation;
     public bool toBeDeleted = false;
     public Constraint2D graphic;
+    public List<Segment> constraintedSegments = new List<Segment>();
    // public int consEquations;
     public Constraint(int lambdas, List<Point> points)
     {
@@ -562,6 +515,22 @@ abstract public class Constraint
         pointList = points;
         FindUniquePoints();
       //  consEquations = uniquePoints.Count * 2 + lambdas;
+    }
+
+    public void ReleaseSegments()
+    {
+        foreach (Segment s in constraintedSegments)
+        {
+            s.constraints.RemoveAt(s.constraints.FindIndex(c => c.startingEquation == startingEquation));
+        }
+    }
+
+    public void AddConstraintReference()
+    {
+        foreach (Point p in uniquePoints)
+        {
+            p.relatedConstraints.Add(this);
+        }
     }
 
     public abstract void DrawConstraint();
@@ -872,6 +841,10 @@ public class Verticality : Constraint
 {
     public Verticality(Point p1, Point p2) : base(1, new List<Point> { p1, p2 }) { }
 
+    public Verticality(Segment segment) : this(segment.p1, segment.p2) 
+    {
+        constraintedSegments.Add(segment);
+    }
     public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
     {
         //да как так-то а
@@ -894,7 +867,8 @@ public class Verticality : Constraint
 
     public override void DrawConstraint()
     {
-
+        graphic.gameObject.transform.position = new Vector3((float)((pointList[0].x + pointList[1].x) / 2.0), 
+            (float)((pointList[0].y + pointList[1].y) / 2.0), 0f);
     }
     public override void FillJacobian(Matrix<double> a, Matrix<double> deltas, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
     {
@@ -940,7 +914,10 @@ public class Verticality : Constraint
 public class Horizontality : Constraint
 {
     public Horizontality(Point p1, Point p2) : base(1, new List<Point> { p1, p2 }) { }
-
+    public Horizontality(Segment segment) : this(segment.p1, segment.p2) 
+    {
+        constraintedSegments.Add(segment);
+    }
     public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
     {
         if (!pointList[0].IsOrigin())
@@ -993,7 +970,8 @@ public class Horizontality : Constraint
 
     public override void DrawConstraint()
     {
-
+        graphic.gameObject.transform.position = new Vector3((float)((pointList[0].x + pointList[1].x) / 2.0),
+            (float)((pointList[0].y + pointList[1].y) / 2.0), 0f);
     }
     public override double EstimateError(Matrix<double> deltas)
     {

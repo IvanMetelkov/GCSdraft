@@ -10,6 +10,7 @@ public class ConstraintButton : MonoBehaviour
     public void SetDrawingMode()
     {
         WindowManager.constraintType = constraintType;
+        WindowManager.graphicType = 0;
         WindowManager.primitiveDrawMode = false;
         WindowManager.constraintDrawMode = true;
         WindowManager.ClearTemporaryGraphic();

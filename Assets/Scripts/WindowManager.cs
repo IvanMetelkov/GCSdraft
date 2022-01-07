@@ -37,6 +37,8 @@ public class WindowManager : MonoBehaviour
     private Sprite segmentImage;
     [SerializeField]
     private Sprite[] constraintSprites;
+    [SerializeField]
+    private Sprite[] constraintPrefabSprites;
     public static int inversedPointCount = -4;
     public static GraphicComponent componentToDelete = null;
     public static List<Segment> segmentsToDelete = new List<Segment>();
@@ -120,6 +122,7 @@ public class WindowManager : MonoBehaviour
         }
         inversedPointCount = -4;
         tempPoints.Clear();
+        tempSegments.Clear();
     }
 
     public static List<T> GetRaycastHit<T>()
@@ -186,11 +189,16 @@ public class WindowManager : MonoBehaviour
             if (constraintDrawMode)
             {
                 List<Point2D> points = GetRaycastHit<Point2D>();
+                List<Line2D> lines = GetRaycastHit<Line2D>();
                 switch (constraintType)
                 {
                     case ConstraintType.Fixation:
                     case ConstraintType.Alignment:
                         FishForPoints(points);
+                        break;
+                    case ConstraintType.Horizontality:
+                    case ConstraintType.Verticality:
+                        FishForLines(lines);
                         break;
                     case 0:
                         break;
@@ -218,6 +226,11 @@ public class WindowManager : MonoBehaviour
         if (tempSegments.Count == 0 && constraintDrawMode && tempPoints.Count > 0)
         {
             FormNewPointConstraint();
+        }
+        else
+        if (tempSegments.Count > 0 && constraintDrawMode && tempPoints.Count == 0)
+        {
+            FormNewSegmentConstraint();
         }
 
         if (!primitiveDrawMode && !constraintDrawMode && componentToDelete != null)
@@ -263,6 +276,7 @@ public class WindowManager : MonoBehaviour
         if (Input.GetKey(KeyCode.Delete) && !IsPointerOverUIObject() && !primitiveDrawMode && !constraintDrawMode)
         {
             tempPoints.Clear();
+            tempSegments.Clear();
             DisableQuickMenu();
             List<GraphicComponent> graphics = GetRaycastHit<GraphicComponent>();
             if (graphics.Count > 0)
@@ -298,6 +312,19 @@ public class WindowManager : MonoBehaviour
         }
     }
 
+    private void FishForLines(List<Line2D> lines)
+    {
+        if (lines.Count == 1)
+        {
+            tempSegments.Add(lines[0].segment);
+        }
+        else
+        if (lines.Count > 1)
+        {
+            PopulateList(lines);
+            EnableQuickMenu();
+        }
+    }
     private Constraint2D DrawNewConstraint(Constraint constraint, string tooltipText)
     {
         GameObject instance;
@@ -313,6 +340,7 @@ public class WindowManager : MonoBehaviour
         else
         {
             instance = Instantiate(genericConstraint);
+            instance.GetComponent<SpriteRenderer>().sprite = constraintPrefabSprites[(int)constraintType - 1];
         }
         Constraint2D constraintComponent = instance.GetComponent<Constraint2D>();
         constraintComponent.constraint = constraint;
@@ -321,6 +349,44 @@ public class WindowManager : MonoBehaviour
         SetupScale(constraintComponent.gameObject, new Vector3(Constraint2D.defaultScale, Constraint2D.defaultScale, 1f), true);
         instance.transform.SetParent(graphicsHolder);
         return constraintComponent;
+    }
+
+    private void FormNewSegmentConstraint()
+    {
+        switch (constraintType)
+        {
+            case ConstraintType.Horizontality:
+                if (!tempSegments[0].isOrigin)
+                {
+                    Horizontality tmp = new Horizontality(tempSegments[0]);
+                    if (gcsManager.AddConstraint(tmp))
+                    {
+                        tmp.AddConstraintReference();
+                        tempSegments[0].constraints.Add(tmp);
+                        tmp.graphic = DrawNewConstraint(tmp, "Horizontality: S" + tempSegments[0].segmentID);
+                        gcsManager.MoveGraphics();
+                    }
+                }
+                tempSegments.Clear();
+                break;
+            case ConstraintType.Verticality:
+                if (!tempSegments[0].isOrigin)
+                {
+                    Verticality tmp = new Verticality(tempSegments[0]);
+                    if (gcsManager.AddConstraint(tmp))
+                    {
+                        tempSegments[0].constraints.Add(tmp);
+                        tmp.AddConstraintReference();
+                        tmp.graphic = DrawNewConstraint(tmp, "Verticality: S" + tempSegments[0].segmentID);
+                        gcsManager.MoveGraphics();
+                    }
+                }
+                tempSegments.Clear();
+                break;
+            case 0:
+                tempSegments.Clear();
+                break;
+        }
     }
     private void FormNewPointConstraint()
     {
@@ -332,7 +398,7 @@ public class WindowManager : MonoBehaviour
                     Fixation tmp = new Fixation(tempPoints[0]);
                     if (gcsManager.AddConstraint(tmp))
                     {
-                        tempPoints[0].relatedConstraints.Add(tmp);
+                        tmp.AddConstraintReference();
                         tmp.graphic = DrawNewConstraint(tmp, "Fixation:" + tempPoints[0].graphic.tooltipName);
                         gcsManager.MoveGraphics();
                     }
@@ -347,8 +413,7 @@ public class WindowManager : MonoBehaviour
                         Alignment tmp = new Alignment(tempPoints[0], tempPoints[1]);
                         if (gcsManager.AddConstraint(tmp))
                         {
-                            tempPoints[0].relatedConstraints.Add(tmp);
-                            tempPoints[1].relatedConstraints.Add(tmp);
+                            tmp.AddConstraintReference();
                             tmp.graphic = DrawNewConstraint(tmp, "Alignment: P" + tempPoints[0].pointID + ":P" +
                                 tempPoints[1].pointID);
                             gcsManager.MoveGraphics();
