@@ -224,6 +224,7 @@ public class WindowManager : MonoBehaviour
                         break;
                     case ConstraintType.Horizontality:
                     case ConstraintType.Verticality:
+                    case ConstraintType.Parallel:
                         FishForLines(lines);
                         break;
                     case 0:
@@ -413,6 +414,24 @@ public class WindowManager : MonoBehaviour
                     }
                 }
                 tempSegments.Clear();
+                break;
+            case ConstraintType.Parallel:
+                if (tempSegments.Count == 2)
+                {
+                    if ((!tempSegments[0].isOrigin || !tempSegments[1].isOrigin) && tempSegments[0].segmentID != tempSegments[1].segmentID)
+                    {
+                        ParallelLines tmp = new ParallelLines(tempSegments[0], tempSegments[1]);
+                        if (gcsManager.AddConstraint(tmp))
+                        {
+                            tempSegments[0].constraints.Add(tmp);
+                            tempSegments[1].constraints.Add(tmp);
+                            tmp.AddConstraintReference();
+                            tmp.graphic = DrawNewConstraint(tmp, "Parallel: S" + tempSegments[0].segmentID + ":S" + tempSegments[1].segmentID);
+                            gcsManager.MoveGraphics();
+                        }
+                    }
+                    tempSegments.Clear();
+                }
                 break;
             case 0:
                 tempSegments.Clear();
@@ -607,5 +626,6 @@ public enum ConstraintType
     Alignment = 2,
     Verticality = 3,
     Horizontality = 4,
-    Distance = 5
+    Distance = 5,
+    Parallel
 }
