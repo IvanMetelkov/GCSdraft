@@ -8,6 +8,7 @@ public class WindowManager : MonoBehaviour
 {
     public static GameObject toolTip;
     private static GameObject quickMenu;
+    private static GameObject submitMenu;
     private Transform graphicsHolder;
     private Canvas canvas;
     public static float tooltipOffset = 30.0f;
@@ -43,6 +44,8 @@ public class WindowManager : MonoBehaviour
     public static GraphicComponent componentToDelete = null;
     public static List<Segment> segmentsToDelete = new List<Segment>();
     public static List<Segment> tempSegments = new List<Segment>();
+    private static double submittedValue;
+    private static bool success = false;
 
     void Awake()
     {
@@ -106,9 +109,17 @@ public class WindowManager : MonoBehaviour
         canvas = GameObject.Find("Canvas").GetComponent<Canvas>();
         toolTip = canvas.transform.Find("ToolTip").gameObject;
         quickMenu = canvas.transform.Find("QuickSelection").gameObject;
+        submitMenu = canvas.transform.Find("ParameterMenu").gameObject;
         listContent = quickMenu.transform.Find("ScrollList").gameObject.
             transform.Find("ScrollViewPort").gameObject.
             transform.Find("Content").gameObject;
+    }
+
+    public static void SetValue(double value)
+    {
+        submittedValue = value;
+        submitMenu.gameObject.SetActive(false);
+        success = true;
     }
 
     public static void ClearTemporaryGraphic()
@@ -143,6 +154,15 @@ public class WindowManager : MonoBehaviour
     }
     void Update()
     {
+        if (Input.GetMouseButtonDown(0) && submitMenu.activeSelf && !IsPointerOverUIObject())
+        {
+            submitMenu.SetActive(false);
+            success = false;
+            submittedValue = 0.0;
+            tempPoints.Clear();
+            tempSegments.Clear();
+        }
+        else
         if (Input.GetMouseButtonDown(0) && quickMenu.activeSelf && !IsPointerOverUIObject())
         {
             DisableQuickMenu();
@@ -196,6 +216,12 @@ public class WindowManager : MonoBehaviour
                     case ConstraintType.Alignment:
                         FishForPoints(points);
                         break;
+                    case ConstraintType.Distance:
+                        if (tempPoints.Count != 2 && !submitMenu.activeSelf && !success)
+                        {
+                            FishForPoints(points);
+                        }
+                        break;
                     case ConstraintType.Horizontality:
                     case ConstraintType.Verticality:
                         FishForLines(lines);
@@ -218,6 +244,11 @@ public class WindowManager : MonoBehaviour
             }
         }
         //костылище
+        if (tempPoints.Count == 2 && !submitMenu.activeSelf && !success && constraintDrawMode && constraintType == ConstraintType.Distance)
+        {
+            EnableMenu(submitMenu);
+        }
+        else
         if (primitiveDrawMode && tempPoints.Count == 2 && graphicType == GraphicType.Segment)
         {
             FormNewSegment();
@@ -282,7 +313,7 @@ public class WindowManager : MonoBehaviour
             if (graphics.Count > 0)
             {
                 PopulateList(graphics);
-                EnableQuickMenu();
+                EnableMenu(quickMenu);
             }
         }
 
@@ -308,7 +339,7 @@ public class WindowManager : MonoBehaviour
         if (points.Count > 1)
         {
             PopulateList(points);
-            EnableQuickMenu();
+            EnableMenu(quickMenu);
         }
     }
 
@@ -322,7 +353,7 @@ public class WindowManager : MonoBehaviour
         if (lines.Count > 1)
         {
             PopulateList(lines);
-            EnableQuickMenu();
+            EnableMenu(quickMenu);
         }
     }
     private Constraint2D DrawNewConstraint(Constraint constraint, string tooltipText)
@@ -422,12 +453,38 @@ public class WindowManager : MonoBehaviour
                     tempPoints.Clear();
                 }
                 break;
+            case ConstraintType.Distance:
+                if (tempPoints.Count == 2)
+                {
+                    if (success)
+                    {
+                        if (tempPoints[0].pointID != tempPoints[1].pointID)
+                        {
+                            Distance tmp = new Distance(tempPoints[0], tempPoints[1], submittedValue);
+                            if (gcsManager.AddConstraint(tmp))
+                            {
+                                tmp.AddConstraintReference();
+                                tmp.graphic = DrawNewConstraint(tmp, "Distance: P" + tempPoints[0].pointID + ":P" +
+                                    tempPoints[1].pointID);
+                                gcsManager.MoveGraphics();
+                            }
+                        }
+                        tempPoints.Clear();
+                        success = false;
+                    }
+                }
+                break;
             case 0:
                 tempPoints.Clear();
                 break;
         }
     }
 
+    public static void DisableSubmitMenu()
+    {
+        submitMenu.SetActive(false);
+        success = false;
+    }
     private void FormNewSegment()
     {
         if (tempPoints[0].pointID != tempPoints[1].pointID)
@@ -460,12 +517,12 @@ public class WindowManager : MonoBehaviour
             ClearTemporaryGraphic();
         }
     }
-    void EnableQuickMenu()
+    void EnableMenu(GameObject menu)
     {
-        quickMenu.SetActive(true);
+        menu.SetActive(true);
         Vector3 screenPos = Input.mousePosition;
         screenPos.x += 150f;
-        quickMenu.transform.position = screenPos;
+        menu.transform.position = screenPos;
         HideToolTip();
     }
 
@@ -549,5 +606,6 @@ public enum ConstraintType
     Fixation = 1,
     Alignment = 2,
     Verticality = 3,
-    Horizontality = 4
+    Horizontality = 4,
+    Distance = 5
 }

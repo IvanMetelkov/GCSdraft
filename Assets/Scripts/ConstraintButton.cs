@@ -9,11 +9,12 @@ public class ConstraintButton : MonoBehaviour
 
     public void SetDrawingMode()
     {
+        WindowManager.ClearTemporaryGraphic();
+        WindowManager.DisableQuickMenu();
+        WindowManager.DisableSubmitMenu();
         WindowManager.constraintType = constraintType;
         WindowManager.graphicType = 0;
         WindowManager.primitiveDrawMode = false;
         WindowManager.constraintDrawMode = true;
-        WindowManager.ClearTemporaryGraphic();
-        WindowManager.DisableQuickMenu();
     }
 }

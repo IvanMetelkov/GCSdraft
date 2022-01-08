@@ -7,11 +7,12 @@ public class PrimitiveButton : MonoBehaviour
 
     public void SetDrawingMode()
     {
+        WindowManager.ClearTemporaryGraphic();
+        WindowManager.DisableQuickMenu();
+        WindowManager.DisableSubmitMenu();
         WindowManager.graphicType = graphicType;
         WindowManager.constraintType = 0;
         WindowManager.primitiveDrawMode = true;
         WindowManager.constraintDrawMode = false;
-        WindowManager.ClearTemporaryGraphic();
-        WindowManager.DisableQuickMenu();
     }
 }
