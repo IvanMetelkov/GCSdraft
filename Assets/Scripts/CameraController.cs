@@ -86,6 +86,11 @@ public class CameraController : MonoBehaviour
         foreach(Constraint c in gcsManager.constraints)
         {
             c.graphic.gameObject.GetComponent<ScalableGraphic>().ScaleTransform();
+            if (c.GetType() == typeof(ParallelLines))
+            {
+                ParallelLines p = (ParallelLines)c;
+                p.secondaryGraphic.gameObject.GetComponent<ScalableGraphic>().ScaleTransform();
+            }
         }
     }
 }

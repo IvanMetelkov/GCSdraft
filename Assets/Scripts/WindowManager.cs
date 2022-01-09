@@ -26,6 +26,10 @@ public class WindowManager : MonoBehaviour
     [SerializeField]
     private GameObject alignmentPrefab;
     [SerializeField]
+    private GameObject parallelPrefab;
+    [SerializeField]
+    private GameObject perpPrefab;
+    [SerializeField]
     private GameObject genericConstraint;
     private GCSmanager gcsManager;
     public static bool primitiveDrawMode = false;
@@ -231,7 +235,18 @@ public class WindowManager : MonoBehaviour
                     case ConstraintType.Horizontality:
                     case ConstraintType.Verticality:
                     case ConstraintType.Parallel:
+                    case ConstraintType.Perpendicular:
                         FishForLines(lines);
+                        break;
+                    case ConstraintType.PointOnLine:
+                        if (tempPoints.Count == 0)
+                        {
+                            FishForPoints(points);
+                        }
+                        if (tempSegments.Count == 0)
+                        {
+                            FishForLines(lines);
+                        }
                         break;
                     case 0:
                         break;
@@ -256,11 +271,16 @@ public class WindowManager : MonoBehaviour
             EnableMenu(submitMenu);
         }
         else
+        if (tempPoints.Count == 1 && tempSegments.Count == 1 && constraintType == ConstraintType.PointOnLine)
+        {
+            FormNewSegmentConstraint();
+        }
+        else
         if (primitiveDrawMode && tempPoints.Count == 2 && graphicType == GraphicType.Segment)
         {
             FormNewSegment();
         }
-
+        else
         if (tempSegments.Count == 0 && constraintDrawMode && tempPoints.Count > 0)
         {
             FormNewPointConstraint();
@@ -304,6 +324,10 @@ public class WindowManager : MonoBehaviour
             {
                 Debug.Log("delete");
                 Constraint2D tmp = (Constraint2D)componentToDelete;
+                if (tmp.isSecondary)
+                {
+                    tmp = tmp.constraint.graphic;
+                }
                 gcsManager.DeleteConstraint(tmp.constraint);
                 Destroy(tmp.gameObject);
                 Debug.Log(gcsManager.constraintedPoints.Count);
@@ -326,12 +350,15 @@ public class WindowManager : MonoBehaviour
 
         if (Input.GetKey(KeyCode.Escape))
         {
-            primitiveDrawMode = false;
-            constraintDrawMode = false;
-            graphicType = 0;
-            constraintType = 0;
             ClearTemporaryGraphic();
             DisableQuickMenu();
+            primitiveDrawMode = false;
+            constraintDrawMode = false;
+            submitMenu.SetActive(false);
+            success = false;
+            submittedValue = 0.0;
+            graphicType = 0;
+            constraintType = 0;
         }
 
     }
@@ -366,6 +393,7 @@ public class WindowManager : MonoBehaviour
     private Constraint2D DrawNewConstraint(Constraint constraint, string tooltipText)
     {
         GameObject instance;
+        //просто запихни в массив 4HEad
         if (constraintType == ConstraintType.Fixation)
         {
              instance = Instantiate(fixationConstraintPrefab);
@@ -374,6 +402,16 @@ public class WindowManager : MonoBehaviour
         if (constraintType == ConstraintType.Alignment)
         {
             instance = Instantiate(alignmentPrefab);
+        }
+        else
+        if (constraintType == ConstraintType.Parallel)
+        {
+            instance = Instantiate(parallelPrefab);
+        }
+        else
+        if (constraintType == ConstraintType.Perpendicular)
+        {
+            instance = Instantiate(perpPrefab);
         }
         else
         {
@@ -434,10 +472,48 @@ public class WindowManager : MonoBehaviour
                             tempSegments[1].constraints.Add(tmp);
                             tmp.AddConstraintReference();
                             tmp.graphic = DrawNewConstraint(tmp, "Parallel: S" + tempSegments[0].segmentID + ":S" + tempSegments[1].segmentID);
+                            tmp.secondaryGraphic = DrawNewConstraint(tmp, "Parallel: S" + tempSegments[1].segmentID + ":S" + tempSegments[0].segmentID);
+                            tmp.secondaryGraphic.isSecondary = true;
                             gcsManager.MoveGraphics();
                         }
                     }
                     tempSegments.Clear();
+                }
+                break;
+            case ConstraintType.Perpendicular:
+                if (tempSegments.Count == 2)
+                {
+                    if ((!tempSegments[0].isOrigin || !tempSegments[1].isOrigin) && tempSegments[0].segmentID != tempSegments[1].segmentID)
+                    {
+                        PerpendicularLines tmp = new PerpendicularLines(tempSegments[0], tempSegments[1]);
+                        if (gcsManager.AddConstraint(tmp))
+                        {
+                            tempSegments[0].constraints.Add(tmp);
+                            tempSegments[1].constraints.Add(tmp);
+                            tmp.AddConstraintReference();
+                            tmp.graphic = DrawNewConstraint(tmp, "Perpend.: S" + tempSegments[0].segmentID + ":S" + tempSegments[1].segmentID);
+                            gcsManager.MoveGraphics();
+                        }
+                    }
+                    tempSegments.Clear();
+                }
+                break;
+            case ConstraintType.PointOnLine:
+                if (tempPoints.Count == 1 && tempSegments.Count == 1)
+                {
+                    if (!tempSegments[0].isOrigin || !tempPoints[0].IsOrigin())
+                    {
+                        PointOnLine tmp = new PointOnLine(tempPoints[0], tempSegments[0]);
+                        if (gcsManager.AddConstraint(tmp))
+                        {
+                            tempSegments[0].constraints.Add(tmp);
+                            tmp.AddConstraintReference();
+                            tmp.graphic = DrawNewConstraint(tmp, "Point P" + tempPoints[0].pointID + " on S" + tempSegments[0].segmentID);
+                            gcsManager.MoveGraphics();
+                        }
+                    }
+                    tempSegments.Clear();
+                    tempPoints.Clear();
                 }
                 break;
             case 0:
@@ -621,5 +697,8 @@ public enum ConstraintType
     Verticality,
     Horizontality,
     Distance,
-    Parallel
+    Parallel,
+    Perpendicular,
+    PointOnLine,
+    Angle
 }
