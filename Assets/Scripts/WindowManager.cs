@@ -4,6 +4,10 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using System;
 
+/// <summary>
+/// кто захочет читать следующий далее код-
+/// пеняйте на себя (осторожно, костыли)
+/// </summary>
 public class WindowManager : MonoBehaviour
 {
     public static GameObject toolTip;
@@ -81,6 +85,7 @@ public class WindowManager : MonoBehaviour
         lineComponent.tooltipName = tooltipText;
         lineComponent.UpdateValues();
         lineComponent.DrawSegment();
+        lineComponent.iconSprite = segmentImage;
         segment.graphic = lineComponent;
         if (!segment.isOrigin)
         {
@@ -97,6 +102,7 @@ public class WindowManager : MonoBehaviour
         pointComponent.tooltipName = toolTipText;
         pointComponent.UpdateValues();
         point.graphic = pointComponent;
+        pointComponent.iconSprite = pointImage;
         SetupScale(instance, new Vector3(Point2D.defaultScale, Point2D.defaultScale, 1f));
         if (!point.IsOrigin())
         {
@@ -375,6 +381,7 @@ public class WindowManager : MonoBehaviour
             instance.GetComponent<SpriteRenderer>().sprite = constraintPrefabSprites[(int)constraintType - 1];
         }
         Constraint2D constraintComponent = instance.GetComponent<Constraint2D>();
+        constraintComponent.iconSprite = constraintSprites[(int)constraintType - 1];
         constraintComponent.constraint = constraint;
         constraintComponent.tooltipName = tooltipText;
         constraintComponent.tooltip.text = tooltipText;
@@ -562,20 +569,7 @@ public class WindowManager : MonoBehaviour
             obj.transform.Find("Number").GetComponent<Text>().text = (i + 1).ToString();
             obj.transform.Find("Name").GetComponent<Text>().text = list[i].tooltipName;
             Image img = obj.transform.Find("Icon").GetComponent<Image>();
-            if (list[i].GetType() == typeof(Point2D))
-            {
-                img.sprite = pointImage;
-            }
-            if (list[i].GetType() == typeof(Line2D))
-            {
-                img.sprite = segmentImage;
-            }
-            if (list[i].GetType() == typeof(Constraint2D))
-            {
-                Constraint2D tmp = (Constraint2D)(object)list[i];
-                img.sprite = constraintSprites[tmp.constraintNumber];
-            }
-
+            img.sprite = list[i].iconSprite;
             ListComponentScript content = obj.GetComponent<ListComponentScript>();
             content.graphicComponent = list[i];
             obj.transform.SetParent(listContent.transform);
@@ -614,18 +608,18 @@ public class WindowManager : MonoBehaviour
 
 public enum GraphicType
 {
-    None = 0,
-    Point = 1,
-    Segment = 2
+    None,
+    Point,
+    Segment
 }
 
 public enum ConstraintType
 {
-    None = 0,
-    Fixation = 1,
-    Alignment = 2,
-    Verticality = 3,
-    Horizontality = 4,
-    Distance = 5,
+    None,
+    Fixation,
+    Alignment,
+    Verticality,
+    Horizontality,
+    Distance,
     Parallel
 }
