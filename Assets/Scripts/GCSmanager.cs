@@ -1645,3 +1645,190 @@ public class EqualSegments : Constraint
         return Math.Abs(Math.Pow(a1, 2.0) + Math.Pow(a3, 2.0) - Math.Pow(a2, 2.0) - Math.Pow(a4, 2.0));
     }
 }
+
+public class PointLineDistance : Constraint
+{
+    public double distance;
+    public PointLineDistance(Point p, Segment s, double d) : base(1, new List<Point> { s.p1, s.p2, p })
+    {
+        distance = d;
+        constraintedSegments.Add(s);
+    }
+
+    public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
+    {
+        double c1 = pointList[1].x - pointList[0].x;
+        double c2 = pointList[1].y - pointList[0].y;
+        double c3 = pointList[2].x - pointList[1].x;
+        double c4 = pointList[2].y - pointList[1].y;
+        double c5 = pointList[2].x - pointList[0].x;
+        double c6 = pointList[2].y - pointList[0].y;
+
+        if (columns[0] != -1)
+        {
+            m[equationNumber, 2 * columns[0]] += (c2 * (pointList[2].x) + (-c1) * (pointList[2].y) - (pointList[0].x) * (c2) + (pointList[0].y) * c1) * (2 * c4) - Math.Pow(distance, 2.0) * (-2 * c1);
+            m[equationNumber, 2 * columns[0] + 1] += ((c2) * (pointList[2].x) + (-c1)* (pointList[2].y) - (pointList[0].x) * (c2) + (pointList[0].y) * (c1)) * (-2 * c3) -Math.Pow(distance, 2.0) * (-2 * c2);
+        }
+
+        if (columns[1] != -1)
+        {
+            m[equationNumber, 2 * columns[1]] += (c2 * (pointList[2].x) + (-c1) * (pointList[2].y) - (pointList[0].x) * (c2) + (pointList[0].y) * (c1)) * (-2 * c5) - Math.Pow(distance, 2.0) * (2 * c1);
+            m[equationNumber, 2 * columns[1] + 1] += ((c2) * (pointList[2].x) + (-2 * c1) * (pointList[2].y) - (pointList[0].x) * (c2) + (pointList[0].y) * (c1)) * (2 * c6) - Math.Pow(distance, 2.0) * (-2 * c2);
+        }
+
+        if (columns[2] != -1)
+        {
+            m[equationNumber, 2 * columns[2]] += (2 * c2) * (c2 * (pointList[2].x) + (-c1) * (pointList[2].y) - (pointList[0].x) * (c2) + (pointList[0].y) * (c1));
+            m[equationNumber, 2 * columns[2] + 1] += (-2 * c1) * ((c2) * (pointList[2].x) + (-c1) * (pointList[2].y) - (pointList[0].x) * (c2) + (pointList[0].y) * (c1));
+        }
+    }
+
+    public override void DrawConstraint()
+    {
+        //Point tmp = GCSmanager.CalculateIntersection(pointList, out double alpha);
+        graphic.gameObject.transform.position = new Vector3((float)pointList[2].x, (float)pointList[2].y, 0f);
+    }
+    public override void FillJacobian(Matrix<double> a, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    {
+        double c1 = pointList[1].x - pointList[0].x + pointList[1].currentDeltas.Item1 - pointList[0].currentDeltas.Item1;
+        double c2 = pointList[1].y - pointList[0].y + pointList[1].currentDeltas.Item2 - pointList[0].currentDeltas.Item2;
+        double c3 = pointList[2].x - pointList[1].x + pointList[2].currentDeltas.Item1 - pointList[1].currentDeltas.Item1;
+        double c4 = pointList[2].y - pointList[1].y + pointList[2].currentDeltas.Item2 - pointList[1].currentDeltas.Item2;
+        double c5 = pointList[2].x - pointList[0].x + pointList[2].currentDeltas.Item1 - pointList[0].currentDeltas.Item1;
+        double c6 = pointList[2].y - pointList[0].y + pointList[2].currentDeltas.Item2 - pointList[0].currentDeltas.Item2;
+
+        double r = pointList[2].x + pointList[2].currentDeltas.Item1,
+            f = pointList[2].y + pointList[2].currentDeltas.Item2,
+            g = pointList[0].x + pointList[0].currentDeltas.Item1,
+            h = pointList[0].y + pointList[0].currentDeltas.Item2;
+        b[startingColumnL, 0] = Math.Pow(c2 * r - c1 * f - g * c2 + h * c1, 2.0) - Math.Pow(distance, 2.0) * (Math.Pow(c1, 2.0) + Math.Pow(c2, 2.0));
+
+        if (columns[0] != -1 && !pointList[0].isFixed)
+        {
+            FillDiagonalValue(a, columns[0], pointList[0], b);
+
+            a[2 * columns[0], startingColumnL] += (c2 * (r) + (-c1) * (f) - (g) * (c2) + (h) * c1) * (2 * c4) - Math.Pow(distance, 2.0) * (-2 * c1);
+            a[2 * columns[0] + 1, startingColumnL] += -(((c2) * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1)) * (-2 * c3) - Math.Pow(distance, 2.0) * (-2 * c2));
+
+            a[startingColumnL, 2 * columns[0]] += (c2 * (r) + (-c1) * (f) - (g) * (c2) + (h) * c1) * (2 * c4) - Math.Pow(distance, 2.0) * (-2 * c1);
+            a[startingColumnL, 2 * columns[0] + 1] += -(((c2) * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1)) * (-2 * c3) - Math.Pow(distance, 2.0) * (-2 * c2));
+
+            b[2 * columns[0], 0] += lambdaList[0] * ((c2 * (r) + (-c1) * (f) - (g) * (c2) + (h) * c1) * (2 * c4) - Math.Pow(distance, 2.0) * (-2 * c1));
+            b[2 * columns[0] + 1, 0] += -lambdaList[0] * (((c2) * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1)) * (-2 * c3) - Math.Pow(distance, 2.0) * (-2 * c2));
+
+            a[2 * columns[0], 2 * columns[0]] += lambdaList[0] * (-2 * Math.Pow(distance, 2.0) + 2 * c4 * c4);
+            a[2 * columns[0], 2 * columns[0] + 1] += -lambdaList[0] * (r + g + c1) * 2 * c4; //????????
+
+            a[2 * columns[0] + 1, 2 * columns[0] + 1] += -lambdaList[0] * (-2 * Math.Pow(distance, 2.0) + 2 * c3 * c3);
+            a[2 * columns[0] + 1, 2 * columns[0]] += lambdaList[0] * (f - c2 - h) * (-2 * c5);
+
+            if (columns[1] != -1)
+            {
+                a[2 * columns[0], 2 * columns[1]] += lambdaList[0] * ((-f + h) * 2 * c4 + 2 * distance);
+                a[2 * columns[0], 2 * columns[1] + 1] += lambdaList[0] * (-2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (2 * c4) * (c6) - 2 * (h) * (c1));
+
+                a[2 * columns[0] + 1, 2 * columns[1]] += lambdaList[0] * (2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (-2 * c3) * (-c5) + 2 * (h) * (c1));
+                a[2 * columns[0] + 1, 2 * columns[1] + 1] += lambdaList[0] * ((r - g)*(-2 * c3) + 2 * distance);
+            }
+
+            if (columns[2] != -1)
+            {
+                a[2 * columns[0], 2 * columns[2]] += -lambdaList[0] * ((c2) * (2 * c4));
+                a[2 * columns[0], 2 * columns[2] + 1] += lambdaList[0] * (2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (-c1) * (-2 * c4) +2 * (h) * (c1));
+
+                a[2 * columns[0] + 1, 2 * columns[2]] += -lambdaList[0] * (-2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (c2) * (-2 * c3) - 2 * (h) * (c1));
+                a[2 * columns[0] + 1, 2 * columns[2] + 1] += lambdaList[0] * ((-c1) * (-2 * c3));
+            }
+        }
+
+        if (columns[1] != -1 && !pointList[1].isFixed)
+        {
+            FillDiagonalValue(a, columns[1], pointList[1], b);
+
+            a[2 * columns[1], startingColumnL] += -((c2 * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1)) * (-2 * c5) - Math.Pow(distance, 2.0) * (2 * c1));
+            a[2 * columns[1] + 1, startingColumnL] += ((c2) * (r) + (-2 * c1) * (f) - (g) * (c2) + (h) * (c1)) * (2 * c6) - Math.Pow(distance, 2.0) * (-2 * c2);
+
+            a[startingColumnL, 2 * columns[1]] += -((c2 * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1)) * (-2 * c5) - Math.Pow(distance, 2.0) * (2 * c1));
+            a[startingColumnL, 2 * columns[1] + 1] += ((c2) * (r) + (-2 * c1) * (f) - (g) * (c2) + (h) * (c1)) * (2 * c6) - Math.Pow(distance, 2.0) * (-2 * c2);
+
+            b[2 * columns[1], 0] += -lambdaList[0] * ((c2 * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1)) * (-2 * c5) - Math.Pow(distance, 2.0) * (2 * c1));
+            b[2 * columns[1] + 1, 0] += lambdaList[0] * ((c2) * (r) + (-2 * c1) * (f) - (g) * (c2) + (h) * (c1)) * (2 * c6) - Math.Pow(distance, 2.0) * (-2 * c2);
+
+            a[2 * columns[1], 2 * columns[1]] += -lambdaList[0] * (-2 * Math.Pow(distance, 2.0) + (2 * c5)*(c5));
+            a[2 * columns[1], 2 * columns[1] + 1] += lambdaList[0] * (-2 * c5) * c6;
+
+            a[2 * columns[1] + 1, 2 * columns[1] + 1] += lambdaList[0] * (-2 * Math.Pow(distance, 2.0) + (2 * c6)*(c6));
+            a[2 * columns[1] + 1, 2 * columns[1]] += lambdaList[0] * ((-f + h) * (2 * c6));
+
+            if (columns[0] != -1)
+            {
+                a[2 * columns[1], 2 * columns[0]] += lambdaList[0] * (2 * Math.Pow(distance, 2.0) + (-2 * c5)*(c4));
+                a[2 * columns[1], 2 * columns[0] + 1] += lambdaList[0] * (2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (-2 * c5)*(-c3) + 2 * (h) * (c1));
+
+                a[2 * columns[1] + 1, 2 * columns[0]] += -lambdaList[0] * (-2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (2 * c6)*(c4) - 2 * (h) * (c1));
+                a[2 * columns[1] + 1, 2 * columns[0] + 1] += -lambdaList[0] * ((-(r) + (g) + (c1))*(2*c6) + 2*distance);
+            }
+
+            if (columns[2] != -1)
+            {
+                a[2 * columns[1], 2 * columns[2]] += lambdaList[0] * ((c2) * (-2*c5));
+                a[2 * columns[1], 2 * columns[2] + 1] += lambdaList[0] * (-2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (-c1) * (-2*c5) -2 * (h) * (c2));
+
+                a[2 * columns[1] + 1, 2 * columns[2]] += lambdaList[0] * (2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (c2) * (2*c6) +2 * (h) * (c1));
+                a[2 * columns[1] + 1, 2 * columns[2] + 1] += lambdaList[0] * ((-c1)*(2*c6));
+            }
+        }
+
+        if (columns[2] != -1 && !pointList[2].isFixed)
+        {
+            FillDiagonalValue(a, columns[2], pointList[2], b);
+
+            a[2 * columns[2], startingColumnL] += (2 * c2) * (c2 * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1));
+            a[2 * columns[2] + 1, startingColumnL] += (-2 * c1) * ((c2) * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1));
+
+            a[startingColumnL, 2 * columns[2]] += (2 * c2) * (c2 * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1));
+            a[startingColumnL, 2 * columns[2] + 1] += (-2 * c1) * ((c2) * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1));
+
+            b[2 * columns[2], 0] += lambdaList[0] * (2 * c2) * (c2 * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1));
+            b[2 * columns[2] + 1, 0] += lambdaList[0] * (-2 * c1) * ((c2) * (r) + (-c1) * (f) - (g) * (c2) + (h) * (c1));
+
+            a[2 * columns[2], 2 * columns[2]] += lambdaList[0] * (2*c2)*(c2);
+            a[2 * columns[2], 2 * columns[2] + 1] += lambdaList[0] * ((2*c2)*(-c1));
+
+            a[2 * columns[2] + 1, 2 * columns[2] + 1] += lambdaList[0] * (2*c1)*(c1);
+            a[2 * columns[2] + 1, 2 * columns[2]] += lambdaList[0] * (-2*c1)*(c2);
+
+            if (columns[0] != -1)
+            {
+                a[2 * columns[2], 2 * columns[0]] += lambdaList[0] * ((2 * c2)*(c4));
+                a[2 * columns[2], 2 * columns[0] + 1] += -lambdaList[0] * (-2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2) + (2*c2)*(-c3) - 2 * (h) * (c1)));
+
+                a[2 * columns[2] + 1, 2 * columns[0]] += lambdaList[0] * (2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (-2*c1)*(c4) + 2 * (h) * (c1));
+                a[2 * columns[2] + 1, 2 * columns[0] + 1] += -lambdaList[0] * ((-2*c1)*(-(r) + (g) + (c1)));
+            }
+
+            if (columns[1] != -1)
+            {
+                a[2 * columns[2], 2 * columns[1]] += lambdaList[0] * ((2*c2)*(-c5));
+                a[2 * columns[2], 2 * columns[1] + 1] += lambdaList[0] * (2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (2*c2)*(c5) + 2 * (h) * (c1));
+
+                a[2 * columns[2] + 1, 2 * columns[1]] += -lambdaList[0] * (-2 * ((c2) * (r) + (-c1) * (f) - (g) * (c2)) + (-2*c1)*(-c5) - 2 * (h) * (c1));
+                a[2 * columns[2] + 1, 2 * columns[1] + 1] += lambdaList[0] * ((-2*c1)*((r) - (g)));
+            }
+        }
+
+    }
+
+    public override double EstimateError()
+    {
+        double c1 = pointList[1].x - pointList[0].x + pointList[1].currentDeltas.Item1 - pointList[0].currentDeltas.Item1;
+        double c2 = pointList[1].y - pointList[0].y + pointList[1].currentDeltas.Item2 - pointList[0].currentDeltas.Item2;
+
+        double r = pointList[2].x + pointList[2].currentDeltas.Item1,
+            f = pointList[2].y + pointList[2].currentDeltas.Item2,
+            g = pointList[0].x + pointList[0].currentDeltas.Item1,
+            h = pointList[0].y + pointList[0].currentDeltas.Item2;
+
+        return Math.Abs(Math.Pow(c2 * r - c1 * f - g * c2 + h * c1, 2.0) - Math.Pow(distance, 2.0) * (Math.Pow(c1, 2.0) + Math.Pow(c2, 2.0)));
+    }
+}

@@ -241,6 +241,7 @@ public class WindowManager : MonoBehaviour
                         FishForLines(lines);
                         break;
                     case ConstraintType.PointOnLine:
+                    case ConstraintType.PointLineDistance:
                         if (tempPoints.Count == 0)
                         {
                             FishForPoints(points);
@@ -273,12 +274,18 @@ public class WindowManager : MonoBehaviour
             EnableMenu(submitMenu);
         }
         else
+        if (tempPoints.Count == 1 && !submitMenu.activeSelf && !success && constraintDrawMode && constraintType == ConstraintType.PointLineDistance
+            && tempSegments.Count == 1)
+        {
+            EnableMenu(submitMenu);
+        }
+        else
          if (tempSegments.Count == 2 && !submitMenu.activeSelf && !success && constraintDrawMode && constraintType == ConstraintType.Angle)
         {
             EnableMenu(submitMenu);
         }
         else
-        if (tempPoints.Count == 1 && tempSegments.Count == 1 && constraintType == ConstraintType.PointOnLine)
+        if (tempPoints.Count == 1 && tempSegments.Count == 1 && (constraintType == ConstraintType.PointOnLine || constraintType == ConstraintType.PointLineDistance))
         {
             FormNewSegmentConstraint();
         }
@@ -564,6 +571,28 @@ public class WindowManager : MonoBehaviour
                     tempSegments.Clear();
                 }
                 break;
+            case ConstraintType.PointLineDistance:
+                if (success)
+                {
+                    if (tempPoints.Count == 1 && tempSegments.Count == 1)
+                    {
+                        if (!tempSegments[0].isOrigin || !tempPoints[0].IsOrigin())
+                        {
+                            PointLineDistance tmp = new PointLineDistance(tempPoints[0], tempSegments[0], submittedValue);
+                            if (gcsManager.AddConstraint(tmp))
+                            {
+                                tempSegments[0].constraints.Add(tmp);
+                                tmp.AddConstraintReference();
+                                tmp.graphic = DrawNewConstraint(tmp, "Distance " + tmp.distance + " P" + tempPoints[0].pointID + "-S" + tempSegments[0].segmentID);
+                                gcsManager.MoveGraphics();
+                            }
+                        }
+                        tempSegments.Clear();
+                        tempPoints.Clear();
+                    }
+                    success = false;
+                }
+                break;
             case 0:
                 tempSegments.Clear();
                 break;
@@ -749,5 +778,6 @@ public enum ConstraintType
     Perpendicular,
     PointOnLine,
     Angle,
-    EqualSegments
+    EqualSegments,
+    PointLineDistance
 }
