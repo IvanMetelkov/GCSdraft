@@ -236,6 +236,8 @@ public class WindowManager : MonoBehaviour
                     case ConstraintType.Verticality:
                     case ConstraintType.Parallel:
                     case ConstraintType.Perpendicular:
+                    case ConstraintType.Angle:
+                    case ConstraintType.EqualSegments:
                         FishForLines(lines);
                         break;
                     case ConstraintType.PointOnLine:
@@ -267,6 +269,11 @@ public class WindowManager : MonoBehaviour
         }
         //костылище
         if (tempPoints.Count == 2 && !submitMenu.activeSelf && !success && constraintDrawMode && constraintType == ConstraintType.Distance)
+        {
+            EnableMenu(submitMenu);
+        }
+        else
+         if (tempSegments.Count == 2 && !submitMenu.activeSelf && !success && constraintDrawMode && constraintType == ConstraintType.Angle)
         {
             EnableMenu(submitMenu);
         }
@@ -516,6 +523,47 @@ public class WindowManager : MonoBehaviour
                     tempPoints.Clear();
                 }
                 break;
+            case ConstraintType.Angle:
+                if (success)
+                {
+                    if (tempSegments.Count == 2)
+                    {
+                        if ((!tempSegments[0].isOrigin || !tempSegments[1].isOrigin) && tempSegments[0].segmentID != tempSegments[1].segmentID)
+                        {
+                            Angle tmp = new Angle(tempSegments[0], tempSegments[1], submittedValue);
+                            if (gcsManager.AddConstraint(tmp))
+                            {
+                                tempSegments[0].constraints.Add(tmp);
+                                tempSegments[1].constraints.Add(tmp);
+                                tmp.AddConstraintReference();
+                                tmp.graphic = DrawNewConstraint(tmp, "Angle " + tmp.angleDeg + "-S:" + tempSegments[0].segmentID + ":S"
+                                    + tempSegments[1].segmentID);
+                                gcsManager.MoveGraphics();
+                            }
+                        }
+                        tempSegments.Clear();
+                    }
+                    success = false;
+                }
+                break;
+            case ConstraintType.EqualSegments:
+                if (tempSegments.Count == 2)
+                {
+                    if ((!tempSegments[0].isOrigin || !tempSegments[1].isOrigin) && tempSegments[0].segmentID != tempSegments[1].segmentID)
+                    {
+                        EqualSegments tmp = new EqualSegments(tempSegments[0], tempSegments[1]);
+                        if (gcsManager.AddConstraint(tmp))
+                        {
+                            tempSegments[0].constraints.Add(tmp);
+                            tempSegments[1].constraints.Add(tmp);
+                            tmp.AddConstraintReference();
+                            tmp.graphic = DrawNewConstraint(tmp, "Equal-S:" + tempSegments[0].segmentID + ":S" + tempSegments[1].segmentID);
+                            gcsManager.MoveGraphics();
+                        }
+                    }
+                    tempSegments.Clear();
+                }
+                break;
             case 0:
                 tempSegments.Clear();
                 break;
@@ -700,5 +748,6 @@ public enum ConstraintType
     Parallel,
     Perpendicular,
     PointOnLine,
-    Angle
+    Angle,
+    EqualSegments
 }

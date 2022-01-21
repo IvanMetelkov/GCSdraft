@@ -92,11 +92,15 @@ public class GCSmanager : MonoBehaviour
         foreach (Constraint constraint in constraints)
         {
             constraint.FillJacobian(consJacobian, consB, startingL + (constraintedPoints.Count + addP) * 2);
+           // constraint.UnmarkPoints();
             startingL += constraint.lambdas;
         }
 
-        if (c !=null)
+        if (c != null)
+        {
             c.FillJacobian(consJacobian, consB, startingL + (constraintedPoints.Count + addP) * 2, constraintedPoints.Count);
+           // c.UnmarkPoints();
+        }
 
        // Debug.Log(consJacobian);
         consB = consB.Multiply(-1.0);
@@ -240,8 +244,8 @@ public class GCSmanager : MonoBehaviour
         {
             ans = new Point((b2 * c1 - b1 * c2) / det, (a1 * c2 - a2 * c1) / det, 0);
         }
-        double alpha1 = Math.Atan2(points[0].y - ans.y, points[0].x - ans.x),
-            alpha2 = Math.Atan2(points[2].y - ans.y, points[2].x - ans.x);
+        double alpha1 = Math.Atan2(points[1].y - points[0].y, points[1].x - points[0].x),
+            alpha2 = Math.Atan2(points[3].y - points[2].y, points[3].x - points[2].x);
         angle = Math.Min(alpha1, alpha2);
 
         return ans;
@@ -262,7 +266,6 @@ public class GCSmanager : MonoBehaviour
                 if (p.columnID == -1 && !p.isFixed)
                 {
                     p.currentDeltas = (Random.Range(-0.3f, 0.3f), Random.Range(-0.3f, 0.3f));
-                  //  Debug.Log(p.currentDeltas);
                 }
             }
         }
@@ -274,7 +277,6 @@ public class GCSmanager : MonoBehaviour
             if (!constraintedPoints[i].isFixed)
             {
                 constraintedPoints[i].currentDeltas = (Random.Range(-0.3f, 0.3f), Random.Range(-0.3f, 0.3f));
-             //   Debug.Log(constraintedPoints[i].currentDeltas);
             }
         }
 
@@ -622,6 +624,13 @@ abstract public class Constraint
         }
     }
 
+    public void UnmarkPoints()
+    {
+        foreach (Point p in uniquePoints)
+        {
+            p.diagonalValueFilled = false;
+        }
+    }
     public void ResetLamdas()
     {
         for (int i = 0; i < lambdaList.Count; ++i)
@@ -660,14 +669,16 @@ abstract public class Constraint
 
     public abstract void FillJacobian(Matrix<double> a, Matrix<double> b, int startingColumnL, int startingColumnP = -1);
 
-    public void FillDiagonalValue(Matrix<double> a, int column, Point point)
+    public void FillDiagonalValue(Matrix<double> a, int column, Point point, Matrix<double> b)
     {
-        //if (!point.diagonalValueFilled)
-       // {
+        if (!point.diagonalValueFilled)
+        {
             a[2 * column, 2 * column] += 1.0;
             a[2 * column + 1, 2 * column + 1] += 1.0;
+            b[2 * column, 0] += point.currentDeltas.Item1;
+            b[2 * column + 1, 0] += point.currentDeltas.Item2;
             point.diagonalValueFilled = true;
-        //}
+        }
     }
     //если ограничение не переопределяет систему и не
     //противоречит другим - "регистрируем" его
@@ -828,7 +839,7 @@ public class Distance : Constraint
 
         if (columns[permutation[0]] != -1 && !pointList[permutation[0]].isFixed)
         {
-            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]]);
+            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]], b);
 
             a[2 * columns[permutation[0]], 2 * columns[permutation[0]]] += 2 * lambdaList[0];
             a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[0]] + 1] += 2 * lambdaList[0];
@@ -836,8 +847,8 @@ public class Distance : Constraint
             a[2 * columns[permutation[0]], startingColumnL] = 2 * c1;
             a[2 * columns[permutation[0]] + 1, startingColumnL] = 2 * c2;
 
-            b[2 * columns[permutation[0]], 0] += pointList[permutation[0]].currentDeltas.Item1 + 2 * c1 * lambdaList[0];
-            b[2 * columns[permutation[0]] + 1, 0] += pointList[permutation[0]].currentDeltas.Item2 + 2 * c2 * lambdaList[0];
+            b[2 * columns[permutation[0]], 0] += 2 * c1 * lambdaList[0];
+            b[2 * columns[permutation[0]] + 1, 0] += 2 * c2 * lambdaList[0];
 
             a[startingColumnL, 2 * columns[permutation[0]]] = 2 * c1;
             a[startingColumnL, 2 * columns[permutation[0]] + 1] = 2 * c2;
@@ -886,7 +897,7 @@ public class Fixation : Constraint
     {
         //протестировать диагональную матрицу, может сработает
         int column = pointList[0].columnID == -1 ? startingColumnP : pointList[0].columnID;
-        FillDiagonalValue(a, column, pointList[0]);
+        FillDiagonalValue(a, column, pointList[0], b);
         a[startingColumnL, startingColumnL] = 1.0;
         a[startingColumnL + 1, startingColumnL + 1] = 1.0;
     }
@@ -941,14 +952,14 @@ public class Alignment : Constraint
         if (!pointList[0].IsOrigin() && !pointList[0].isFixed)
         {
             int column = pointList[0].columnID == -1 ? startingColumnP : pointList[0].columnID;
-            FillDiagonalValue(a, column, pointList[0]);
+            FillDiagonalValue(a, column, pointList[0], b);
             a[2 * column, startingColumnL] = -1.0;
             a[2 * column + 1, startingColumnL + 1] = -1.0;
             a[startingColumnL, 2 * column] = -1.0;
             a[startingColumnL + 1, 2 * column + 1] = -1.0;
 
-            b[2 * column, 0] += pointList[0].currentDeltas.Item1 - lambdaList[0];
-            b[2 * column + 1, 0] += pointList[0].currentDeltas.Item2 - lambdaList[1];
+            b[2 * column, 0] += -lambdaList[0];
+            b[2 * column + 1, 0] += -lambdaList[1];
             if (pointList[0].columnID == -1)
             {
                 startingColumnP++;
@@ -957,15 +968,15 @@ public class Alignment : Constraint
         if (!pointList[1].IsOrigin() && !pointList[1].isFixed)
         {
             int column = pointList[1].columnID == -1 ? startingColumnP : pointList[1].columnID;
-            FillDiagonalValue(a, column, pointList[1]);
+            FillDiagonalValue(a, column, pointList[1], b);
 
             a[2 * column, startingColumnL] = 1.0;
             a[2 * column + 1, startingColumnL + 1] = 1.0;
             a[startingColumnL, 2 * column] = 1.0;
             a[startingColumnL + 1, 2 * column + 1] = 1.0;
 
-            b[2 * column, 0] += pointList[1].currentDeltas.Item1 + lambdaList[0];
-            b[2 * column + 1, 0] += pointList[1].currentDeltas.Item2 + lambdaList[1];
+            b[2 * column, 0] += lambdaList[0];
+            b[2 * column + 1, 0] += lambdaList[1];
         }
     }
 
@@ -1015,9 +1026,9 @@ public class Verticality : Constraint
         if (!pointList[0].IsOrigin() && !pointList[0].isFixed)
         {
             int column = pointList[0].columnID == -1 ? startingColumnP : pointList[0].columnID;
-            FillDiagonalValue(a, column, pointList[0]);
+            FillDiagonalValue(a, column, pointList[0], b);
 
-            b[2 * column, 0] += pointList[0].currentDeltas.Item1 - lambdaList[0];
+            b[2 * column, 0] += -lambdaList[0];
             a[2 * column, startingColumnL] = -1.0;
             a[startingColumnL, 2 * column] = -1.0;
 
@@ -1030,9 +1041,9 @@ public class Verticality : Constraint
         if (!pointList[1].IsOrigin() && !pointList[1].isFixed)
         {
             int column = pointList[1].columnID == -1 ? startingColumnP : pointList[1].columnID;
-            FillDiagonalValue(a, column, pointList[1]);
+            FillDiagonalValue(a, column, pointList[1], b);
 
-            b[2 * column, 0] += pointList[1].currentDeltas.Item1 + lambdaList[0];
+            b[2 * column, 0] += lambdaList[0];
             a[2 * column, startingColumnL] = 1.0;
             a[startingColumnL, 2 * column] = 1.0;
         }
@@ -1080,9 +1091,9 @@ public class Horizontality : Constraint
         if (!pointList[0].IsOrigin() && !pointList[0].isFixed)
         {
             int column = pointList[0].columnID == -1 ? startingColumnP : pointList[0].columnID;
-            FillDiagonalValue(a, column, pointList[0]);
+            FillDiagonalValue(a, column, pointList[0], b);
 
-            b[2 * column + 1, 0] += pointList[0].currentDeltas.Item2 - lambdaList[0];
+            b[2 * column + 1, 0] += -lambdaList[0];
             a[2 * column + 1, startingColumnL] = -1.0;
             a[startingColumnL, 2 * column + 1] = -1.0;
 
@@ -1095,9 +1106,9 @@ public class Horizontality : Constraint
         if (!pointList[1].IsOrigin() && !pointList[1].isFixed)
         {
             int column = pointList[1].columnID == -1 ? startingColumnP : pointList[1].columnID;
-            FillDiagonalValue(a, column, pointList[1]);
+            FillDiagonalValue(a, column, pointList[1], b);
 
-            b[2 * column + 1, 0] += pointList[1].currentDeltas.Item2 + lambdaList[0];
+            b[2 * column + 1, 0] += lambdaList[0];
             a[2 * column + 1, startingColumnL] = 1.0;
             a[startingColumnL, 2 * column + 1] = 1.0;
         }
@@ -1180,9 +1191,9 @@ public class PointOnLine : Constraint
 
         if (columns[permutation[0]] != -1 && !pointList[permutation[0]].isFixed)
         {
-            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]]);
-            b[2 * columns[permutation[0]], 0] += pointList[permutation[0]].currentDeltas.Item1 + lambdaList[0] * c1 * multiplier;
-            b[2 * columns[permutation[0]] + 1, 0] += pointList[permutation[0]].currentDeltas.Item2 - lambdaList[0] * c2 * multiplier;
+            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]], b);
+            b[2 * columns[permutation[0]], 0] += lambdaList[0] * c1 * multiplier;
+            b[2 * columns[permutation[0]] + 1, 0] += -lambdaList[0] * c2 * multiplier;
 
             a[2 * columns[permutation[0]], startingColumnL] += multiplier * c1;
             a[2 * columns[permutation[0]] + 1, startingColumnL] += -multiplier * c2;
@@ -1192,8 +1203,8 @@ public class PointOnLine : Constraint
 
             if (columns[permutation[1]] != -1)
             {
-                a[2 * columns[permutation[0]], columns[permutation[1]] + 1] += -multiplier * lambdaList[0];
-                a[2 * columns[permutation[0]] + 1, columns[permutation[1]]] += multiplier * lambdaList[0];
+                a[2 * columns[permutation[0]], 2 * columns[permutation[1]] + 1] += -multiplier * lambdaList[0];
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[1]]] += multiplier * lambdaList[0];
             }
 
             if (columns[permutation[2]] != -1)
@@ -1279,20 +1290,20 @@ public class ParallelLines : Constraint
 
         if (columns[permutation[0]] != -1 && !pointList[permutation[0]].isFixed)
         {
-            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]]);
-            b[2 * columns[permutation[0]], 0] += pointList[permutation[0]].currentDeltas.Item1 + lambdaList[0] * c1 * multiplier;
-            b[2 * columns[permutation[0]] + 1, 0] += pointList[permutation[0]].currentDeltas.Item2 - lambdaList[0] * c2 * multiplier;
+            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]], b);
+            b[2 * columns[permutation[0]], 0] += lambdaList[0] * c1 * multiplier;
+            b[2 * columns[permutation[0]] + 1, 0] += -lambdaList[0] * c2 * multiplier;
 
-            a[2 * columns[permutation[0]], startingColumnL] = multiplier * c1;
-            a[2 * columns[permutation[0]] + 1, startingColumnL] = -multiplier * c2;
+            a[2 * columns[permutation[0]], startingColumnL] += multiplier * c1;
+            a[2 * columns[permutation[0]] + 1, startingColumnL] += -multiplier * c2;
 
-            a[startingColumnL, 2 * columns[permutation[0]]] = multiplier * c1;
-            a[startingColumnL, 2 * columns[permutation[0]] + 1] = -multiplier * c2;
+            a[startingColumnL, 2 * columns[permutation[0]]] += multiplier * c1;
+            a[startingColumnL, 2 * columns[permutation[0]] + 1] += -multiplier * c2;
 
             if (columns[permutation[1]] != -1)
             {
-                a[2 * columns[permutation[0]], columns[permutation[1]] + 1] += -multiplier * lambdaList[0];
-                a[2 * columns[permutation[0]] + 1, columns[permutation[1]]] += multiplier * lambdaList[0];
+                a[2 * columns[permutation[0]], 2 * columns[permutation[1]] + 1] += -multiplier * lambdaList[0];
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[1]]] += multiplier * lambdaList[0];
             }
 
             if (columns[permutation[2]] != -1)
@@ -1377,20 +1388,20 @@ public class PerpendicularLines : Constraint
 
         if (columns[permutation[0]] != -1 && !pointList[permutation[0]].isFixed)
         {
-            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]]);
-            b[2 * columns[permutation[0]], 0] += pointList[permutation[0]].currentDeltas.Item1 + lambdaList[0] * c1 * multiplier;
-            b[2 * columns[permutation[0]] + 1, 0] += pointList[permutation[0]].currentDeltas.Item2 + lambdaList[0] * c2 * multiplier;
+            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]], b);
+            b[2 * columns[permutation[0]], 0] += lambdaList[0] * c1 * multiplier;
+            b[2 * columns[permutation[0]] + 1, 0] += lambdaList[0] * c2 * multiplier;
 
-            a[2 * columns[permutation[0]], startingColumnL] = multiplier * c1;
-            a[2 * columns[permutation[0]] + 1, startingColumnL] = multiplier * c2;
+            a[2 * columns[permutation[0]], startingColumnL] += multiplier * c1;
+            a[2 * columns[permutation[0]] + 1, startingColumnL] += multiplier * c2;
 
-            a[startingColumnL, 2 * columns[permutation[0]]] = multiplier * c1;
-            a[startingColumnL, 2 * columns[permutation[0]] + 1] = multiplier * c2;
+            a[startingColumnL, 2 * columns[permutation[0]]] += multiplier * c1;
+            a[startingColumnL, 2 * columns[permutation[0]] + 1] += multiplier * c2;
 
             if (columns[permutation[1]] != -1)
             {
-                a[2 * columns[permutation[0]], columns[permutation[1]]] += multiplier * lambdaList[0];
-                a[2 * columns[permutation[0]] + 1, columns[permutation[1]] + 1] += multiplier * lambdaList[0];
+                a[2 * columns[permutation[0]], 2 * columns[permutation[1]]] += -multiplier * lambdaList[0];
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[1]] + 1] += -multiplier * lambdaList[0];
             }
 
             if (columns[permutation[2]] != -1)
@@ -1407,5 +1418,230 @@ public class PerpendicularLines : Constraint
             (pointList[1].x - pointList[0].x + pointList[1].currentDeltas.Item1 - pointList[0].currentDeltas.Item1) +
             (pointList[3].y - pointList[2].y + pointList[3].currentDeltas.Item2 - pointList[2].currentDeltas.Item2) *
             (pointList[1].y - pointList[0].y + pointList[1].currentDeltas.Item2 - pointList[0].currentDeltas.Item2));
+    }
+}
+
+public class Angle : Constraint
+{
+    public double angle;
+    public double angleDeg;
+    public Angle(Segment s1, Segment s2, double angle) : base(1, new List<Point> { s1.p1, s1.p2, s2.p1, s2.p2 })
+    {
+        this.angle = angle * Math.PI / 180.0;
+        angleDeg = angle;
+        constraintedSegments.Add(s1);
+        constraintedSegments.Add(s2);
+    }
+
+    public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
+    {
+        FillDerivativeRow(new List<int> { 0, 1, 3, 2 }, m, equationNumber);
+        FillDerivativeRow(new List<int> { 1, 0, 3, 2 }, m, equationNumber);
+        FillDerivativeRow(new List<int> { 2, 3, 1, 0 }, m, equationNumber);
+        FillDerivativeRow(new List<int> { 3, 2, 1, 0 }, m, equationNumber);
+    }
+
+    private void FillDerivativeRow(List<int> permutation, Matrix<double> m, int equationNumber)
+    {
+        if (columns[permutation[0]] != -1)
+        {
+            m[equationNumber, 2 * columns[permutation[0]]] += 2 * (pointList[permutation[0]].x - pointList[permutation[1]].x) *
+                Math.Pow(pointList[permutation[2]].x - pointList[permutation[3]].x, 2.0) + 2 /** multiplier*/ * 
+                (pointList[permutation[2]].x - pointList[permutation[3]].x) * (pointList[permutation[2]].y - pointList[permutation[3]].y) *
+                (pointList[permutation[0]].y - pointList[permutation[1]].y) - 2 * (pointList[permutation[0]].x - pointList[permutation[1]].x) *
+                (Math.Pow(pointList[permutation[2]].x - pointList[permutation[3]].x, 2.0) + Math.Pow(pointList[permutation[2]].y - pointList[permutation[3]].y, 2.0)) *
+                Math.Pow(Math.Cos(angle), 2.0);
+
+            m[equationNumber, 2 * columns[permutation[0]] + 1] += 2 * (pointList[permutation[0]].y - pointList[permutation[1]].y) *
+                Math.Pow(pointList[permutation[2]].y - pointList[permutation[3]].y, 2.0) + 2 /** multiplier*/ *
+                (pointList[permutation[2]].y - pointList[permutation[3]].y) * (pointList[permutation[2]].x - pointList[permutation[3]].x) *
+                (pointList[permutation[0]].x - pointList[permutation[1]].x) - 2 * (pointList[permutation[0]].y - pointList[permutation[1]].y) *
+                (Math.Pow(pointList[permutation[2]].x - pointList[permutation[3]].x, 2.0) + Math.Pow(pointList[permutation[2]].y - pointList[permutation[3]].y, 2.0)) *
+                Math.Pow(Math.Cos(angle), 2.0);
+        }
+    }
+
+    public override void DrawConstraint()
+    {
+        Point tmp = GCSmanager.CalculateIntersection(pointList, out double alpha);
+        graphic.gameObject.transform.position = new Vector3((float)tmp.x, (float)tmp.y, 0f);
+    }
+    public override void FillJacobian(Matrix<double> a, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    {
+        double a1 = pointList[3].y - pointList[2].y + pointList[3].currentDeltas.Item2 - pointList[2].currentDeltas.Item2;
+        double a2 = pointList[1].y - pointList[0].y + pointList[1].currentDeltas.Item2 - pointList[0].currentDeltas.Item2;
+        double a3 = pointList[3].x - pointList[2].x + pointList[3].currentDeltas.Item1 - pointList[2].currentDeltas.Item1;
+        double a4 = pointList[1].x - pointList[0].x + pointList[1].currentDeltas.Item1 - pointList[0].currentDeltas.Item1;
+        b[startingColumnL, 0] = Math.Pow(a4 * a3 + a1 * a2, 2.0) - (Math.Pow(a4, 2.0) + Math.Pow(a2, 2.0)) * (Math.Pow(a3, 2.0) + Math.Pow(a1, 2.0)) *
+            Math.Pow(Math.Cos(angle), 2.0);
+
+        FillRow(new List<int> { 0, 1, 2, 3 }, a, b, startingColumnL, a4, a2, a3, a1, -1.0);
+        FillRow(new List<int> { 1, 0, 2, 3 }, a, b, startingColumnL, a4, a2, a3, a1, 1.0);
+        FillRow(new List<int> { 2, 3, 0, 1 }, a, b, startingColumnL, a3, a1, a4, a2, -1.0);
+        FillRow(new List<int> { 3, 2, 0, 1 }, a, b, startingColumnL, a3, a1, a4, a2, 1.0);
+    }
+
+    public void FillRow(List<int> permutation, Matrix<double> a, Matrix<double> b, int startingColumnL,
+       double c1, double c2, double c3, double c4, double multiplier)
+    {
+        if (columns[permutation[0]] != -1 && !pointList[permutation[0]].isFixed)
+        {
+            double cosine = Math.Pow(Math.Cos(angle), 2.0);
+            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]], b);
+            b[2 * columns[permutation[0]], 0] += multiplier * lambdaList[0] * (2 * c1 * Math.Pow(c3, 2.0) + 2 * c2 * c3 * c4 - cosine *
+                (2 * c1 * (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0))));
+            b[2 * columns[permutation[0]] + 1, 0] += multiplier * lambdaList[0] * (2 * c2 * Math.Pow(c4, 2.0) + 2 * c1 * c3 * c4 - cosine *
+                (2 * c2 * (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0))));
+
+            a[2 * columns[permutation[0]], startingColumnL] += multiplier * (2 * c1 * Math.Pow(c3, 2.0) + 2 * c2 * c3 * c4 - cosine *
+                (2 * c1 * (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0))));
+            a[2 * columns[permutation[0]] + 1, startingColumnL] += multiplier * (2 * c2 * Math.Pow(c4, 2.0) + 2 * c1 * c3 * c4 - cosine *
+                (2 * c2 * (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0))));
+
+            a[startingColumnL, 2 * columns[permutation[0]]] += multiplier * (2 * c1 * Math.Pow(c3, 2.0) + 2 * c2 * c3 * c4 - cosine *
+                (2 * c1 * (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0))));
+            a[startingColumnL, 2 * columns[permutation[0]] + 1] += multiplier * (2 * c2 * Math.Pow(c4, 2.0) + 2 * c1 * c3 * c4 - cosine *
+                (2 * c2 * (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0))));
+
+            a[2 * columns[permutation[0]], 2 * columns[permutation[0]]] += lambdaList[0] * (2 * Math.Pow(c3, 2.0) - cosine * 2 *
+                (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0)));
+            a[2 * columns[permutation[0]], 2 * columns[permutation[0]] + 1] += lambdaList[0] * 2 * c3 * c4;
+
+            a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[0]]] += lambdaList[0] * 2 * c3 * c4;
+            a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[0]] + 1] += lambdaList[0] * (2 * Math.Pow(c4, 2.0) - cosine * 2 *
+                (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0)));
+            if (columns[permutation[1]] != -1)
+            {
+                a[2 * columns[permutation[0]], 2 * columns[permutation[1]]] += -lambdaList[0] * (2 * Math.Pow(c3, 2.0) - cosine * 2 *
+                (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0)));
+                a[2 * columns[permutation[0]], 2 * columns[permutation[1]] + 1] += -lambdaList[0] * 2 * c3 * c4;
+
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[1]]] += -lambdaList[0] * 2 * c3 * c4;
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[1]] + 1] += -lambdaList[0] * (2 * Math.Pow(c4, 2.0) - cosine * 2 *
+                (Math.Pow(c3, 2.0) + Math.Pow(c4, 2.0)));
+            }
+
+            if (columns[permutation[2]] != -1)
+            {
+                a[2 * columns[permutation[0]], 2 * columns[permutation[2]]] += multiplier * lambdaList[0] * (-4 * c1 * c3 - 2 * c2 * c4 + 4 * cosine *
+                    c1 * c3);
+                a[2 * columns[permutation[0]], 2 * columns[permutation[2]]] += multiplier * lambdaList[0] * (-2 * c2 * c3 + 4 * cosine * c1 * c4);
+
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[2]]] += multiplier * lambdaList[0] * (-2 * c1 * c4 + 4 * cosine * c2 * c3);
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[2]] + 1] += multiplier * lambdaList[0] * (-4 * c2 * c4 - 2 * c1 * c3 + 4 * cosine *
+                    c2 * c4);
+            }
+
+            if (columns[permutation[3]] != -1)
+            {
+                a[2 * columns[permutation[0]], 2 * columns[permutation[3]]] += -multiplier * lambdaList[0] * (-4 * c1 * c3 - 2 * c2 * c4 + 4 * cosine *
+                   c1 * c3);
+                a[2 * columns[permutation[0]], 2 * columns[permutation[3]]] += -multiplier * lambdaList[0] * (-2 * c2 * c3 + 4 * cosine * c1 * c4);
+
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[3]]] += -multiplier * lambdaList[0] * (-2 * c1 * c4 + 4 * cosine * c2 * c3);
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[3]] + 1] += -multiplier * lambdaList[0] * (-4 * c2 * c4 - 2 * c1 * c3 + 4 * cosine *
+                    c2 * c4);
+            }
+        }
+    }
+
+    public override double EstimateError()
+    {
+        double a1 = pointList[3].y - pointList[2].y + pointList[3].currentDeltas.Item2 - pointList[2].currentDeltas.Item2;
+        double a2 = pointList[1].y - pointList[0].y + pointList[1].currentDeltas.Item2 - pointList[0].currentDeltas.Item2;
+        double a3 = pointList[3].x - pointList[2].x + pointList[3].currentDeltas.Item1 - pointList[2].currentDeltas.Item1;
+        double a4 = pointList[1].x - pointList[0].x + pointList[1].currentDeltas.Item1 - pointList[0].currentDeltas.Item1;
+
+        return Math.Abs(Math.Pow(a4 * a3 + a1 * a2, 2.0) - (Math.Pow(a4, 2.0) + Math.Pow(a2, 2.0)) * (Math.Pow(a3, 2.0) + Math.Pow(a1, 2.0)) *
+            Math.Pow(Math.Cos(angle), 2.0));
+    }
+}
+
+public class EqualSegments : Constraint
+{
+    public EqualSegments(Segment s1, Segment s2) : base(1, new List<Point> { s1.p1, s1.p2, s2.p1, s2.p2 })
+    {
+        constraintedSegments.Add(s1);
+        constraintedSegments.Add(s2);
+    }
+
+    public override void FillDerivatives(Matrix<double> m, int equationNumber, Matrix<double> b, int startingColumn = -1)
+    {
+        double a1 = pointList[3].y - pointList[2].y;
+        double a2 = pointList[1].y - pointList[0].y;
+        double a3 = pointList[3].x - pointList[2].x;
+        double a4 = pointList[1].x - pointList[0].x;
+        b[equationNumber, 0] = Math.Pow(a1, 2.0) + Math.Pow(a3, 2.0) - Math.Pow(a2, 2.0) - Math.Pow(a4, 2.0);
+
+        FillDerivativeRow(0, m, a4, a2, equationNumber);
+        FillDerivativeRow(1, m, -a4, -a2, equationNumber);
+        FillDerivativeRow(2, m, -a3, -a1, equationNumber);
+        FillDerivativeRow(3, m, a3, a1, equationNumber);
+    }
+
+    private void FillDerivativeRow(int point, Matrix<double> m, double c1, double c2, int equation)
+    {
+        if (columns[point] != -1)
+        {
+            m[equation, 2 * columns[point]] += 2.0 * c1;
+            m[equation, 2 * columns[point] + 1] += 2.0 * c2;
+        }
+    }
+
+    public override void DrawConstraint()
+    {
+        Point tmp = GCSmanager.CalculateIntersection(pointList, out double alpha);
+        graphic.gameObject.transform.position = new Vector3((float)tmp.x, (float)tmp.y, 0f);
+    }
+    public override void FillJacobian(Matrix<double> a, Matrix<double> b, int startingColumnL, int startingColumnP = -1)
+    {
+        double a1 = pointList[3].y - pointList[2].y + pointList[3].currentDeltas.Item2 - pointList[2].currentDeltas.Item2;
+        double a2 = pointList[1].y - pointList[0].y + pointList[1].currentDeltas.Item2 - pointList[0].currentDeltas.Item2;
+        double a3 = pointList[3].x - pointList[2].x + pointList[3].currentDeltas.Item1 - pointList[2].currentDeltas.Item1;
+        double a4 = pointList[1].x - pointList[0].x + pointList[1].currentDeltas.Item1 - pointList[0].currentDeltas.Item1;
+        b[startingColumnL, 0] = Math.Pow(a1, 2.0) + Math.Pow(a3, 2.0) - Math.Pow(a2, 2.0) - Math.Pow(a4, 2.0);
+
+        FillRow(new List<int> { 0, 1 }, a, b, startingColumnL, a4, a2, 1.0, 1.0);
+        FillRow(new List<int> { 1, 0 }, a, b, startingColumnL, a4, a2, 1.0, -1.0);
+        FillRow(new List<int> { 2, 3 }, a, b, startingColumnL, a3, a1, -1.0, -1.0);
+        FillRow(new List<int> { 3, 2 }, a, b, startingColumnL, a3, a1, -1.0, 1.0);
+    }
+
+    public void FillRow(List<int> permutation, Matrix<double> a, Matrix<double> b, int startingColumnL,
+         double c1, double c2, double multiplier1, double multiplier2)
+    {
+
+        if (columns[permutation[0]] != -1 && !pointList[permutation[0]].isFixed)
+        {
+            FillDiagonalValue(a, columns[permutation[0]], pointList[permutation[0]], b);
+
+            a[2 * columns[permutation[0]], 2 * columns[permutation[0]]] += -2 * lambdaList[0] * multiplier1;
+            a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[0]] + 1] += -2 * lambdaList[0] * multiplier1;
+
+            a[2 * columns[permutation[0]], startingColumnL] += 2 * c1 * multiplier2;
+            a[2 * columns[permutation[0]] + 1, startingColumnL] += 2 * c2 * multiplier2;
+
+            b[2 * columns[permutation[0]], 0] += 2 * c1 * lambdaList[0] * multiplier2;
+            b[2 * columns[permutation[0]] + 1, 0] += 2 * c2 * lambdaList[0] * multiplier2;
+
+            a[startingColumnL, 2 * columns[permutation[0]]] += 2 * c1 * multiplier2;
+            a[startingColumnL, 2 * columns[permutation[0]] + 1] += 2 * c2 * multiplier2;
+
+            if (columns[permutation[1]] != -1)
+            {
+                a[2 * columns[permutation[0]], 2 * columns[permutation[1]]] += 2 * lambdaList[0] * multiplier1;
+                a[2 * columns[permutation[0]] + 1, 2 * columns[permutation[1]] + 1] += 2 * lambdaList[0] * multiplier1;
+            }
+        }
+    }
+
+    public override double EstimateError()
+    {
+        double a1 = pointList[3].y - pointList[2].y + pointList[3].currentDeltas.Item2 - pointList[2].currentDeltas.Item2;
+        double a2 = pointList[1].y - pointList[0].y + pointList[1].currentDeltas.Item2 - pointList[0].currentDeltas.Item2;
+        double a3 = pointList[3].x - pointList[2].x + pointList[3].currentDeltas.Item1 - pointList[2].currentDeltas.Item1;
+        double a4 = pointList[1].x - pointList[0].x + pointList[1].currentDeltas.Item1 - pointList[0].currentDeltas.Item1;
+
+        return Math.Abs(Math.Pow(a1, 2.0) + Math.Pow(a3, 2.0) - Math.Pow(a2, 2.0) - Math.Pow(a4, 2.0));
     }
 }
